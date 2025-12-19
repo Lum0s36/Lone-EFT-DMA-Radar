@@ -36,25 +36,67 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Quests
         /// </summary>
         public void ReadCompletedConditionsHashSet(ulong hashSetPtr, PooledList<string> results)
         {
+            // Read count first to know how many we expect
             var count = Memory.ReadValue<int>(hashSetPtr + QuestConstants.HashSetCountOffset);
+            
+            DebugLogger.LogDebug($"[QuestMemoryReader] HashSet count at 0x{hashSetPtr:X}: {count}");
+            
             if (count <= 0 || count > QuestConstants.MaxHashSetSlots)
-                return;
+            {
+                // Try alternative count offset (some Unity versions differ)
+                var altCount = Memory.ReadValue<int>(hashSetPtr + 0x38);
+                if (altCount > 0 && altCount <= QuestConstants.MaxHashSetSlots)
+                {
+                    count = altCount;
+                    DebugLogger.LogDebug($"[QuestMemoryReader] Using alt count offset: {count}");
+                }
+                else
+                {
+                    DebugLogger.LogDebug($"[QuestMemoryReader] Invalid HashSet count: {count}");
+                    return;
+                }
+            }
 
             var slotsArrayPtr = Memory.ReadPtr(hashSetPtr + QuestConstants.HashSetSlotsOffset);
             if (slotsArrayPtr == 0)
-                return;
+            {
+                // Try alternative slots offset
+                slotsArrayPtr = Memory.ReadPtr(hashSetPtr + 0x10);
+                if (slotsArrayPtr == 0)
+                {
+                    DebugLogger.LogDebug("[QuestMemoryReader] Slots array pointer is null");
+                    return;
+                }
+            }
 
             var slotsArrayLength = Memory.ReadValue<int>(slotsArrayPtr + QuestConstants.ArrayLengthOffset);
             if (slotsArrayLength <= 0 || slotsArrayLength > QuestConstants.MaxHashSetArrayLength)
+            {
+                DebugLogger.LogDebug($"[QuestMemoryReader] Invalid slots array length: {slotsArrayLength}");
                 return;
+            }
 
+            DebugLogger.LogDebug($"[QuestMemoryReader] Slots array at 0x{slotsArrayPtr:X}, length: {slotsArrayLength}");
+
+            // Try all possible slot sizes (primary)
             foreach (var slotSize in QuestConstants.HashSetSlotSizes)
             {
                 if (TryReadSlotsWithSize(slotsArrayPtr, slotsArrayLength, slotSize, count, results))
                     return;
             }
 
-            DebugLogger.LogDebug("[QuestMemoryReader] Manual HashSet reading failed, results may be incomplete");
+            // If standard sizes didn't work, try fallback sizes
+            foreach (var slotSize in QuestConstants.HashSetSlotSizesFallback)
+            {
+                if (TryReadSlotsWithSize(slotsArrayPtr, slotsArrayLength, slotSize, count, results))
+                    return;
+            }
+
+            // Try reading MongoID directly without hashcode check
+            if (TryReadSlotsDirectMongoId(slotsArrayPtr, slotsArrayLength, count, results))
+                return;
+
+            DebugLogger.LogDebug($"[QuestMemoryReader] Manual HashSet reading failed for all slot sizes. Expected {count} conditions.");
         }
 
         private static bool TryReadSlotsWithSize(ulong slotsArrayPtr, int slotsArrayLength, int slotSize, int expectedCount, PooledList<string> results)
@@ -93,10 +135,66 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Quests
                 }
             }
 
-            if (foundCount > 0 && foundCount >= expectedCount / 2)
+            // Accept results if we found at least one condition, OR if we found most of the expected count
+            if (foundCount > 0 && (foundCount >= expectedCount || foundCount >= (expectedCount + 1) / 2))
             {
-                DebugLogger.LogDebug($"[QuestMemoryReader] Successfully read {foundCount} completed conditions with slot size 0x{slotSize:X}");
+                DebugLogger.LogDebug($"[QuestMemoryReader] Successfully read {foundCount}/{expectedCount} completed conditions with slot size 0x{slotSize:X}");
                 return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Alternative reading method: try to read MongoID structures directly.
+        /// Some HashSet implementations store MongoID at different offsets.
+        /// </summary>
+        private static bool TryReadSlotsDirectMongoId(ulong slotsArrayPtr, int slotsArrayLength, int expectedCount, PooledList<string> results)
+        {
+            results.Clear();
+            var slotsStart = slotsArrayPtr + QuestConstants.ArrayHeaderSize;
+            int foundCount = 0;
+
+            // Try different MongoID offsets within each slot
+            int[] mongoIdOffsets = { 0x00, 0x08, 0x10, 0x18 };
+            int[] slotSizes = { 0x20, 0x28, 0x18 };
+
+            foreach (var slotSize in slotSizes)
+            {
+                foreach (var mongoOffset in mongoIdOffsets)
+                {
+                    results.Clear();
+                    foundCount = 0;
+
+                    for (int i = 0; i < slotsArrayLength && i < QuestConstants.MaxHashSetSlots; i++)
+                    {
+                        try
+                        {
+                            var slotAddr = slotsStart + (ulong)(i * slotSize);
+                            
+                            // Try to read MongoID directly
+                            var mongoId = Memory.ReadValue<MongoID>(slotAddr + (ulong)mongoOffset, false);
+                            var conditionId = mongoId.ReadString(QuestConstants.MaxMongoIdLength, true);
+                            
+                            if (IsValidConditionId(conditionId))
+                            {
+                                results.Add(conditionId);
+                                foundCount++;
+                                DebugLogger.LogDebug($"[QuestMemoryReader] Direct MongoID read: {conditionId}");
+                            }
+                        }
+                        catch
+                        {
+                            // Skip invalid entries
+                        }
+                    }
+
+                    if (foundCount > 0 && foundCount >= (expectedCount + 1) / 2)
+                    {
+                        DebugLogger.LogDebug($"[QuestMemoryReader] Direct MongoID read success: {foundCount}/{expectedCount} (slotSize=0x{slotSize:X}, offset=0x{mongoOffset:X})");
+                        return true;
+                    }
+                }
             }
 
             return false;
@@ -104,9 +202,24 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Quests
 
         private static bool IsValidConditionId(string conditionId)
         {
-            return !string.IsNullOrEmpty(conditionId) &&
-                   conditionId.Length >= QuestConstants.MinConditionIdLength &&
-                   conditionId.Length <= QuestConstants.MaxValidConditionIdLength;
+            if (string.IsNullOrEmpty(conditionId))
+                return false;
+            
+            // Valid condition IDs are typically 24 characters (MongoDB ObjectId hex string)
+            // But some may vary, so we use a range
+            if (conditionId.Length < QuestConstants.MinConditionIdLength || 
+                conditionId.Length > QuestConstants.MaxValidConditionIdLength)
+                return false;
+            
+            // Additional validation: condition IDs should be alphanumeric (hex characters for MongoDB ObjectId)
+            // But some may have hyphens or other characters, so just check for printable ASCII
+            foreach (char c in conditionId)
+            {
+                if (c < 0x20 || c > 0x7E)
+                    return false;
+            }
+            
+            return true;
         }
 
         #endregion

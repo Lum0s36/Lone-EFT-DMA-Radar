@@ -196,6 +196,18 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Quests
                 }
 
                 questEntry.UpdateCompletedConditions(completedConditions);
+                
+                // Log completed conditions for debugging
+                if (completedConditions.Count > 0)
+                {
+                    DebugLogger.LogDebug($"[QuestManager] Quest '{task.Name}': Found {completedConditions.Count} completed conditions");
+                }
+                else
+                {
+                    // Check if the HashSet count was non-zero but reading failed
+                    DebugLogger.LogDebug($"[QuestManager] Quest '{task.Name}': No completed conditions found (ptr: 0x{completedConditionsPtr:X})");
+                }
+                
                 UpdateQuestConditionCounters(questEntry, task, completedConditions);
 
                 // Skip blacklisted quests for filtering
@@ -241,9 +253,16 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Quests
 
                     DebugLogger.LogDebug($"[QuestManager] Matched objective '{obj.Id}' ({obj.Description?.Substring(0, Math.Min(30, obj.Description?.Length ?? 0))}...) = {count.CurrentCount}/{targetCount}");
                 }
-                else if (completedConditions.Contains(obj.Id) && obj.Count > 0)
+                else if (questEntry.CompletedConditions.Contains(obj.Id))
                 {
-                    counters.Add(new KeyValuePair<string, (int, int)>(obj.Id, (obj.Count, obj.Count)));
+                    // Objective is completed but has no counter in memory
+                    // Use questEntry.CompletedConditions (HashSet with OrdinalIgnoreCase) for reliable comparison
+                    // For objectives with Count > 0, set counter to (Count, Count)
+                    // For objectives without Count (e.g. Visit, Mark, Extract, FindQuestItem), set to (1, 1) to indicate completion
+                    int targetCount = obj.Count > 0 ? obj.Count : 1;
+                    counters.Add(new KeyValuePair<string, (int, int)>(obj.Id, (targetCount, targetCount)));
+                    
+                    DebugLogger.LogDebug($"[QuestManager] Objective '{obj.Id}' marked as DONE (in CompletedConditions)");
                 }
             }
 

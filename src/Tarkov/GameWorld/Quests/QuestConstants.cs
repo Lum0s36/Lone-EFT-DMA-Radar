@@ -121,8 +121,14 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Quests
 
         /// <summary>
         /// Possible slot sizes in HashSet (for probing).
+        /// Primary sizes based on MongoID HashSet structure.
         /// </summary>
         public static readonly int[] HashSetSlotSizes = { 0x20, 0x28, 0x30 };
+
+        /// <summary>
+        /// Fallback slot sizes to try if primary sizes fail.
+        /// </summary>
+        public static readonly int[] HashSetSlotSizesFallback = { 0x18, 0x38, 0x40 };
 
         /// <summary>
         /// Offset to MongoID within HashSet slot.
