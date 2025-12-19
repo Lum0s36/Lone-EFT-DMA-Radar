@@ -31,6 +31,7 @@ using LoneEftDmaRadar.DMA;
 using LoneEftDmaRadar.Tarkov.GameWorld.Player;
 using LoneEftDmaRadar.Tarkov.Unity;
 using LoneEftDmaRadar.Tarkov.Unity.Structures;
+using LoneEftDmaRadar.UI.Misc;
 using LoneEftDmaRadar.UI.Radar.Maps;
 using LoneEftDmaRadar.UI.Skia;
 using VmmSharpEx.Scatter;
@@ -45,35 +46,79 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Explosives
         public static implicit operator ulong(Grenade x) => x.Addr;
         private readonly ConcurrentDictionary<ulong, IExplosiveItem> _parent;
         private readonly bool _isSmoke;
-        private readonly UnityTransform _transform;
+        private UnityTransform _transform;
+        private Vector3 _position;
+        private bool _isValid;
+        private int _initRetries;
+        private const int MaxInitRetries = 5;
 
         /// <summary>
         /// Base Address of Grenade Object.
         /// </summary>
         public ulong Addr { get; }
 
+        /// <summary>
+        /// Whether this grenade has been successfully initialized.
+        /// </summary>
+        public bool IsValid => _isValid && !_isSmoke;
+
         public Grenade(ulong baseAddr, ConcurrentDictionary<ulong, IExplosiveItem> parent)
         {
             baseAddr.ThrowIfInvalidVirtualAddress(nameof(baseAddr));
             Addr = baseAddr;
             _parent = parent;
-            var type = ObjectClass.ReadName(baseAddr, ExplosiveConstants.MaxTypeNameLength, false);
-            if (type.Contains(ExplosiveConstants.SmokeGrenadeIdentifier))
-            {
-                _isSmoke = true;
-                return;
-            }
-
-            // Transform chain can be invalid if the grenade is already destroyed/invalid; fail fast.
+            
+            // Check if smoke grenade
             try
             {
-                var ti = Memory.ReadPtrChain(baseAddr, false, UnitySDK.UnityOffsets.TransformChain);
-                _transform = new UnityTransform(ti);
+                var type = ObjectClass.ReadName(baseAddr, ExplosiveConstants.MaxTypeNameLength, false);
+                if (type.Contains(ExplosiveConstants.SmokeGrenadeIdentifier))
+                {
+                    _isSmoke = true;
+                    return;
+                }
             }
             catch
             {
-                throw; // bubble to caller to drop this grenade instance
+                // Failed to read type, try to initialize transform anyway
             }
+
+            // Try to initialize transform - don't throw on failure
+            TryInitializeTransform();
+        }
+
+        /// <summary>
+        /// Attempts to initialize the transform. Can be retried if initial attempt fails.
+        /// </summary>
+        private bool TryInitializeTransform()
+        {
+            if (_isValid || _isSmoke)
+                return _isValid;
+
+            try
+            {
+                var ti = Memory.ReadPtrChain(Addr, false, UnitySDK.UnityOffsets.TransformChain);
+                if (!MemDMA.IsValidVirtualAddress(ti))
+                    return false;
+
+                _transform = new UnityTransform(ti);
+                _position = _transform.UpdatePosition();
+                
+                // Validate position is reasonable
+                if (_position != Vector3.Zero && 
+                    !float.IsNaN(_position.X) && !float.IsNaN(_position.Y) && !float.IsNaN(_position.Z))
+                {
+                    _isValid = true;
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.LogDebug($"Grenade Transform Init failed @ 0x{Addr:X}: {ex.Message}");
+            }
+
+            _initRetries++;
+            return false;
         }
 
         /// <summary>
@@ -83,9 +128,28 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Explosives
         {
             if (_isSmoke)
             {
-                // Smokes never leave the list, don't remove
+                // Smokes never leave the list and have no transform, don't process
                 return;
             }
+
+            // If not valid yet, try to initialize
+            if (!_isValid)
+            {
+                if (_initRetries >= MaxInitRetries)
+                {
+                    // Give up and remove from tracking
+                    _parent.TryRemove(Addr, out _);
+                    return;
+                }
+                
+                // Try to initialize on this tick
+                if (!TryInitializeTransform())
+                    return;
+            }
+
+            if (_transform is null)
+                return;
+
             scatter.PrepareReadValue<bool>(this + Offsets.Throwable._isDestroyed);
             scatter.PrepareReadArray<UnityTransform.TrsX>(_transform.VerticesAddr, _transform.Count);
             scatter.Completed += (sender, x1) =>
@@ -100,7 +164,14 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Explosives
                 {
                     using (vertices)
                     {
-                        _ = _transform.UpdatePosition(vertices.Span);
+                        try
+                        {
+                            _position = _transform.UpdatePosition(vertices.Span);
+                        }
+                        catch
+                        {
+                            // Position update failed, keep old position
+                        }
                     }
                 }
             };
@@ -108,17 +179,21 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Explosives
 
         #region Interfaces
 
-        public ref readonly Vector3 Position => ref _transform.Position;
+        public ref readonly Vector3 Position => ref _position;
 
         public void Draw(SKCanvas canvas, EftMapParams mapParams, LocalPlayer localPlayer)
         {
-            if (_isSmoke)
+            // Skip smoke grenades and invalid/uninitialized grenades
+            if (_isSmoke || !_isValid || _transform is null)
                 return;
+            if (_position == Vector3.Zero)
+                return;
+                
             var circlePosition = Position.ToMapPos(mapParams.Map).ToZoomedPos(mapParams);
             var size = ExplosiveConstants.MarkerSize * App.Config.UI.UIScale;
             SKPaints.ShapeOutline.StrokeWidth = SKPaints.PaintExplosives.StrokeWidth + ExplosiveConstants.OutlineStrokeWidthAddition * App.Config.UI.UIScale;
             canvas.DrawCircle(circlePosition, size, SKPaints.ShapeOutline); // Draw outline
-            canvas.DrawCircle(circlePosition, size, SKPaints.PaintExplosives); // draw LocalPlayer marker
+            canvas.DrawCircle(circlePosition, size, SKPaints.PaintExplosives); // Draw grenade marker
         }
 
         #endregion

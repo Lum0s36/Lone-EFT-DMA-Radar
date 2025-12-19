@@ -57,7 +57,7 @@ namespace LoneEftDmaRadar.UI.Skia
 
         public static SKPaint PaintExplosives { get; } = new()
         {
-            Color = SKColors.OrangeRed,
+            Color = SKColors.Red,
             StrokeWidth = SKConstants.ExplosiveStrokeWidth,
             Style = SKPaintStyle.Stroke,
             IsAntialias = true,

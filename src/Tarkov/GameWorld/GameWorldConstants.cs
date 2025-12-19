@@ -47,9 +47,10 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld
         public static readonly TimeSpan SlowWorkerInterval = TimeSpan.FromMilliseconds(50);
 
         /// <summary>
-        /// Explosives worker interval (~60Hz) - Used for grenade/tripwire tracking.
+        /// Explosives worker interval (~120Hz) - Used for grenade/tripwire tracking.
+        /// Needs to be fast for live grenade tracking.
         /// </summary>
-        public static readonly TimeSpan ExplosivesWorkerInterval = TimeSpan.FromMilliseconds(16);
+        public static readonly TimeSpan ExplosivesWorkerInterval = TimeSpan.FromMilliseconds(8);
 
         /// <summary>
         /// MemWrites worker interval (~10Hz) - Used for memory write features.

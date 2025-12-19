@@ -28,6 +28,7 @@ SOFTWARE.
 
 using LoneEftDmaRadar.DMA;
 using LoneEftDmaRadar.Tarkov.GameWorld.Player;
+using LoneEftDmaRadar.Tarkov.Unity;
 using LoneEftDmaRadar.Tarkov.Unity.Collections;
 using LoneEftDmaRadar.Tarkov.Unity.Structures;
 using LoneEftDmaRadar.UI.Misc;
@@ -175,8 +176,12 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Exits
                         if (string.IsNullOrEmpty(exfilName))
                             continue;
 
-                        // Read position from static map data based on name
-                        var position = GetExfilPositionFromStatic(exfilName);
+                        // Try to read position from Transform first, fallback to static data
+                        var position = TryGetExfilPositionFromTransform(exfilAddr);
+                        if (position == Vector3.Zero)
+                        {
+                            position = GetExfilPositionFromStatic(exfilName);
+                        }
                         
                         // Check if this exfil is eligible for the player
                         bool isEligible = CheckExfilEligibility(exfilAddr);
@@ -196,6 +201,27 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Exits
             catch (Exception ex)
             {
                 DebugLogger.LogDebug($"[ExitManager] ProcessExfilArray Error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Try to read exfil position directly from its Transform in memory.
+        /// </summary>
+        private Vector3 TryGetExfilPositionFromTransform(ulong exfilAddr)
+        {
+            try
+            {
+                // Read the Transform chain from the exfil MonoBehaviour
+                var transformInternal = Memory.ReadPtrChain(exfilAddr, false, UnitySDK.UnityOffsets.TransformChain);
+                if (!MemDMA.IsValidVirtualAddress(transformInternal))
+                    return Vector3.Zero;
+
+                var transform = new UnityTransform(transformInternal);
+                return transform.UpdatePosition();
+            }
+            catch
+            {
+                return Vector3.Zero;
             }
         }
 
@@ -252,28 +278,22 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Exits
                 if (_exits is null || _exits.Count == 0)
                     return;
 
-                var map = Memory.CreateScatterMap();
-                var round1 = map.AddRound();
-
-                for (int ix = 0; ix < _exits.Count; ix++)
+                // Read status for each exfil directly (no caching for real-time updates)
+                foreach (var entry in _exits)
                 {
-                    int i = ix;
-                    var entry = _exits[i];
-                    
                     if (entry is Exfil exfil && exfil.ExfilBase != 0)
                     {
-                        round1.PrepareReadValue<int>(exfil.ExfilBase + Offsets.ExfiltrationPoint._status);
-                        round1.Completed += (sender, s1) =>
+                        try
                         {
-                            if (s1.ReadValue<int>(exfil.ExfilBase + Offsets.ExfiltrationPoint._status, out var exfilStatus))
-                            {
-                                exfil.Update((Enums.EExfiltrationStatus)exfilStatus);
-                            }
-                        };
+                            var status = Memory.ReadValue<int>(exfil.ExfilBase + Offsets.ExfiltrationPoint._status, false);
+                            exfil.UpdateFromRaw(status);
+                        }
+                        catch
+                        {
+                            // Silently ignore read errors for individual exfils
+                        }
                     }
                 }
-                
-                map.Execute();
             }
             catch (Exception ex)
             {

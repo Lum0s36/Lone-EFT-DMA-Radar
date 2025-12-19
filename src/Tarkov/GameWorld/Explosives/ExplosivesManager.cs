@@ -28,6 +28,7 @@ SOFTWARE.
 
 using LoneEftDmaRadar.Tarkov.Unity.Collections;
 using LoneEftDmaRadar.UI.Misc;
+using VmmSharpEx.Options;
 
 namespace LoneEftDmaRadar.Tarkov.GameWorld.Explosives
 {
@@ -49,14 +50,18 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Explosives
         /// </summary>
         public void Refresh(CancellationToken ct)
         {
+            // First, scan for new grenades - this needs to be fast
             GetGrenades(ct);
             GetTripwires(ct);
-            var explosives = _explosives.Values;
-            if (explosives.Count == 0)
+            
+            var explosives = _explosives.Values.ToArray(); // Snapshot for thread safety
+            if (explosives.Length == 0)
             {
                 return;
             }
-            using var scatter = Memory.CreateScatter(VmmSharpEx.Options.VmmFlags.NOCACHE);
+            
+            // Update positions using scatter read for performance
+            using var scatter = Memory.CreateScatter(VmmFlags.NOCACHE);
             foreach (var explosive in explosives)
             {
                 ct.ThrowIfCancellationRequested();
@@ -67,6 +72,8 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Explosives
                 catch (Exception ex)
                 {
                     DebugLogger.LogDebug($"Error Refreshing Explosive @ 0x{explosive.Addr.ToString("X")}: {ex}");
+                    // Remove problematic explosive
+                    _explosives.TryRemove(explosive.Addr, out _);
                 }
             }
             scatter.Execute();
@@ -79,19 +86,25 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Explosives
                 var grenades = Memory.ReadPtr(_localGameWorld + Offsets.GameWorld.Grenades);
                 var grenadesListPtr = Memory.ReadPtr(grenades + ExplosiveConstants.GrenadesListOffset);
                 using var grenadesList = UnityList<ulong>.Create(grenadesListPtr, false);
-                foreach (var grenade in grenadesList)
+                
+                foreach (var grenadeAddr in grenadesList)
                 {
                     ct.ThrowIfCancellationRequested();
+                    
+                    // Skip if already tracked
+                    if (_explosives.ContainsKey(grenadeAddr))
+                        continue;
+                    
+                    // Create grenade - constructor no longer throws
                     try
                     {
-                        _ = _explosives.GetOrAdd(
-                            grenade,
-                            addr => new Grenade(addr, _explosives));
+                        var grenade = new Grenade(grenadeAddr, _explosives);
+                        _explosives.TryAdd(grenadeAddr, grenade);
                     }
                     catch (Exception ex)
                     {
-                        DebugLogger.LogDebug($"Error Processing Grenade @ 0x{grenade.ToString("X")}: {ex}");
-                        _ = _explosives.TryRemove(grenade, out _); // drop bad entry to avoid repeated errors
+                        // This should rarely happen now, but log it
+                        DebugLogger.LogDebug($"Error Creating Grenade @ 0x{grenadeAddr.ToString("X")}: {ex}");
                     }
                 }
             }
@@ -107,17 +120,23 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Explosives
             {
                 var syncObjectsPtr = Memory.ReadPtrChain(_localGameWorld, true, _toSyncObjects);
                 using var syncObjects = UnityList<ulong>.Create(syncObjectsPtr, true);
+                
                 foreach (var syncObject in syncObjects)
                 {
                     ct.ThrowIfCancellationRequested();
+                    
+                    // Skip if already tracked
+                    if (_explosives.ContainsKey(syncObject))
+                        continue;
+                    
                     try
                     {
                         var type = (Enums.SynchronizableObjectType)Memory.ReadValue<int>(syncObject + Offsets.SynchronizableObject.Type);
                         if (type is not Enums.SynchronizableObjectType.Tripwire)
                             continue;
-                        _ = _explosives.GetOrAdd(
-                            syncObject,
-                            addr => new Tripwire(addr));
+                            
+                        var tripwire = new Tripwire(syncObject);
+                        _explosives.TryAdd(syncObject, tripwire);
                     }
                     catch (Exception ex)
                     {
@@ -133,7 +152,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Explosives
 
         #region IReadOnlyCollection
 
-        public int Count => _explosives.Values.Count;
+        public int Count => _explosives.Count;
         public IEnumerator<IExplosiveItem> GetEnumerator() => _explosives.Values.GetEnumerator();
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 

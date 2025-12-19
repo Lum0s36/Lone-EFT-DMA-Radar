@@ -115,7 +115,26 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Exits
                 Enums.EExfiltrationStatus.AwaitsManualActivation => EStatus.Pending,
                 Enums.EExfiltrationStatus.Countdown => EStatus.Open,
                 Enums.EExfiltrationStatus.RegularMode => EStatus.Open,
-                _ => EStatus.Pending
+                _ => EStatus.Closed // Default to Closed for unknown status values
+            };
+        }
+
+        /// <summary>
+        /// Updates the exfil status directly from raw int value.
+        /// </summary>
+        public void UpdateFromRaw(int rawStatus)
+        {
+            // Handle raw status value - EExfiltrationStatus is 1-indexed
+            Status = rawStatus switch
+            {
+                1 => EStatus.Closed,  // NotPresent
+                2 => EStatus.Pending, // UncompleteRequirements
+                3 => EStatus.Open,    // Countdown
+                4 => EStatus.Open,    // RegularMode
+                5 => EStatus.Pending, // Pending
+                6 => EStatus.Pending, // AwaitsManualActivation
+                7 => EStatus.Closed,  // Hidden
+                _ => EStatus.Closed   // Unknown - default to Closed
             };
         }
 
