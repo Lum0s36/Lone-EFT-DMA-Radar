@@ -271,28 +271,28 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Loot
             var point = Position.ToMapPos(mapParams.Map).ToZoomedPos(mapParams);
             MouseoverPosition = new Vector2(point.X, point.Y);
             
-            SKPaints.ShapeOutline.StrokeWidth = 2f;
+            SKPaints.ShapeOutline.StrokeWidth = LootConstants.OutlineStrokeWidth;
             
-            if (heightDiff > 1.45) // loot is above player
+            if (heightDiff > LootConstants.HeightThreshold) // loot is above player
             {
-                using var path = point.GetUpArrow(5);
+                using var path = point.GetUpArrow(LootConstants.ArrowSize);
                 canvas.DrawPath(path, SKPaints.ShapeOutline);
                 canvas.DrawPath(path, paints.Item1);
             }
-            else if (heightDiff < -1.45) // loot is below player
+            else if (heightDiff < -LootConstants.HeightThreshold) // loot is below player
             {
-                using var path = point.GetDownArrow(5);
+                using var path = point.GetDownArrow(LootConstants.ArrowSize);
                 canvas.DrawPath(path, SKPaints.ShapeOutline);
                 canvas.DrawPath(path, paints.Item1);
             }
             else // loot is level with player
             {
-                var size = 5 * App.Config.UI.UIScale;
+                var size = LootConstants.BaseCircleSize * App.Config.UI.UIScale;
                 canvas.DrawCircle(point, size, SKPaints.ShapeOutline);
                 canvas.DrawCircle(point, size, paints.Item1);
             }
 
-            point.Offset(7 * App.Config.UI.UIScale, 3 * App.Config.UI.UIScale);
+            point.Offset(LootConstants.LabelOffsetX * App.Config.UI.UIScale, LootConstants.LabelOffsetY * App.Config.UI.UIScale);
 
             canvas.DrawText(
                 label,
@@ -400,7 +400,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Loot
                     var paint = new SKPaint
                     {
                         Color = skColor,
-                        StrokeWidth = 3f * App.Config.UI.UIScale,
+                        StrokeWidth = LootConstants.FilterPaintStrokeWidth * App.Config.UI.UIScale,
                         Style = SKPaintStyle.Fill,
                         IsAntialias = true
                     };
@@ -414,7 +414,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Loot
                 },
                 (key, existingValue) =>
                 {
-                    existingValue.Item1.StrokeWidth = 3f * App.Config.UI.UIScale;
+                    existingValue.Item1.StrokeWidth = LootConstants.FilterPaintStrokeWidth * App.Config.UI.UIScale;
                     return existingValue;
                 });
 
@@ -425,7 +425,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Loot
         {
             foreach (var paint in _paints)
             {
-                paint.Value.Item1.StrokeWidth = 3f * newScale;
+                paint.Value.Item1.StrokeWidth = LootConstants.FilterPaintStrokeWidth * newScale;
             }
         }
 

@@ -17,8 +17,8 @@ namespace LoneEftDmaRadar.Tarkov.Features.MemWrites
         private ulong _cachedNewShotRecoil;
 
         // Used to avoid unnecessary writes every tick
-        private float _lastRecoilAmount = 1.0f;
-        private float _lastSwayAmount   = 1.0f;
+        private float _lastRecoilAmount = MemWriteConstants.DefaultIntensity;
+        private float _lastSwayAmount   = MemWriteConstants.DefaultIntensity;
 
         // Optional: track "session" so we can invalidate cache when weapon changes
         private ulong _lastPwaPtr;
@@ -50,7 +50,7 @@ namespace LoneEftDmaRadar.Tarkov.Features.MemWrites
             set => App.Config.MemWrites.NoRecoilEnabled = value;
         }
 
-        protected override TimeSpan Delay => TimeSpan.FromMilliseconds(50);
+        protected override TimeSpan Delay => TimeSpan.FromMilliseconds(MemWriteConstants.NoRecoilDelayMs);
 
         public override void TryApply(LocalPlayer localPlayer)
         {
@@ -111,8 +111,6 @@ namespace LoneEftDmaRadar.Tarkov.Features.MemWrites
 
 private void ApplyNoRecoil(LocalPlayer localPlayer)
 {
-    //DebugLogger.LogDebug("[NoRecoil] ApplyNoRecoil called");
-
     try
     {
         // Convert UI percentages (0 = normal, 100 = fully removed) into intensity scalars.
@@ -120,30 +118,21 @@ private void ApplyNoRecoil(LocalPlayer localPlayer)
         float recoilAmount = Math.Clamp(1f - (App.Config.MemWrites.NoRecoilAmount / 100f), 0f, 1f);
         float swayAmount   = Math.Clamp(1f - (App.Config.MemWrites.NoSwayAmount   / 100f), 0f, 1f);
 
-        //DebugLogger.LogDebug($"[NoRecoil] Target - RecoilAmount: {recoilAmount:F3}, SwayAmount: {swayAmount:F3}");
-
         var (breathEffector, shotEffector, newShotRecoil) = GetEffectorPointers(localPlayer);
-
-        //DebugLogger.LogDebug($"[NoRecoil] Pointers - Breath: 0x{breathEffector:X}, Shot: 0x{shotEffector:X}, NewShotRecoil: 0x{newShotRecoil:X}");
 
         if (!ValidatePointers(breathEffector, shotEffector, newShotRecoil))
         {
-            //DebugLogger.LogDebug("[NoRecoil] Invalid effector pointers, clearing cache");
             ClearCache();
             return;
         }
 
-        //DebugLogger.LogDebug("[NoRecoil] Pointers valid, reading current values...");
-
-        // ? Read CURRENT values from game memory
+        // Read CURRENT values from game memory
         float currentBreath = Memory.ReadValue<float>(
             breathEffector + Offsets.BreathEffector.Intensity, false);
 
-        //DebugLogger.LogDebug($"[NoRecoil] Current breath intensity: {currentBreath:F3}");
-
-        if (currentBreath < 0f || currentBreath > 5f)
+        if (currentBreath < MemWriteConstants.MinBreathIntensity || 
+            currentBreath > MemWriteConstants.MaxBreathIntensity)
         {
-            //DebugLogger.LogDebug($"[NoRecoil] Invalid breath value: {currentBreath}, clearing cache");
             ClearCache();
             return;
         }
@@ -151,43 +140,30 @@ private void ApplyNoRecoil(LocalPlayer localPlayer)
         Vector3 currentRecoil = Memory.ReadValue<Vector3>(
             newShotRecoil + Offsets.NewShotRecoil.IntensitySeparateFactors, false);
 
-        //DebugLogger.LogDebug($"[NoRecoil] Current recoil vector: ({currentRecoil.X:F3}, {currentRecoil.Y:F3}, {currentRecoil.Z:F3})");
-
         int currentMask = Memory.ReadValue<int>(
             localPlayer.PWA + Offsets.ProceduralWeaponAnimation.Mask, false);
 
-        //DebugLogger.LogDebug($"[NoRecoil] Current PWA mask: {currentMask}");
-
-        // ? Compare CURRENT vs TARGET (not target vs last target!)
-        if (Math.Abs(currentBreath - swayAmount) > 0.001f)
+        // Compare CURRENT vs TARGET
+        if (Math.Abs(currentBreath - swayAmount) > MemWriteConstants.FloatComparisonTolerance)
         {
-            //DebugLogger.LogDebug($"[NoRecoil] Writing sway: {currentBreath:F3} -> {swayAmount:F3}");
             Memory.WriteValue(
                 breathEffector + Offsets.BreathEffector.Intensity,
                 swayAmount);
         }
-        else
-        {
-            //DebugLogger.LogDebug($"[NoRecoil] Sway already correct: {currentBreath:F3}");
-        }
 
-        // ? Compare CURRENT recoil vs TARGET
+        // Compare CURRENT recoil vs TARGET
         var recoilVec = new Vector3(recoilAmount, recoilAmount, recoilAmount);
-        if (Vector3.Distance(currentRecoil, recoilVec) > 0.001f)
+        if (Vector3.Distance(currentRecoil, recoilVec) > MemWriteConstants.FloatComparisonTolerance)
         {
-            //DebugLogger.LogDebug($"[NoRecoil] Writing recoil: {currentRecoil} -> {recoilVec}");
             Memory.WriteValue(
                 newShotRecoil + Offsets.NewShotRecoil.IntensitySeparateFactors,
                 recoilVec);
         }
-        else
-        {
-            //DebugLogger.LogDebug($"[NoRecoil] Recoil already correct: {currentRecoil}");
-        }
 
         // Mask management
         int targetMask;
-        if (recoilAmount <= 0.15f && swayAmount <= 0.15f)
+        if (recoilAmount <= MemWriteConstants.MinimalMaskThreshold && 
+            swayAmount <= MemWriteConstants.MinimalMaskThreshold)
         {
             targetMask = (int)EProceduralAnimationMask.Shooting;
         }
@@ -196,74 +172,49 @@ private void ApplyNoRecoil(LocalPlayer localPlayer)
             targetMask = ORIGINAL_PWA_MASK;
         }
 
-        //DebugLogger.LogDebug($"[NoRecoil] Target mask: {targetMask} (current: {currentMask})");
-
         if (currentMask != targetMask)
         {
-            //DebugLogger.LogDebug($"[NoRecoil] Writing mask: {currentMask} -> {targetMask}");
             Memory.WriteValue(
                 localPlayer.PWA + Offsets.ProceduralWeaponAnimation.Mask,
                 targetMask);
         }
-        else
-        {
-            //DebugLogger.LogDebug($"[NoRecoil] Mask already correct: {currentMask}");
-        }
 
         _lastRecoilAmount = recoilAmount;
         _lastSwayAmount   = swayAmount;
-
-        //DebugLogger.LogDebug("[NoRecoil] ApplyNoRecoil completed successfully");
     }
     catch
     {
-        //DebugLogger.LogDebug($"[NoRecoil] Error in ApplyNoRecoil: {ex}");
-        //DebugLogger.LogDebug($"[NoRecoil] Stack trace: {ex.StackTrace}");
         throw;
     }
 }
 
         private void ResetNoRecoil(LocalPlayer localPlayer)
         {
-            //DebugLogger.LogDebug("[NoRecoil] ResetNoRecoil called");
-
             try
             {
                 var (breathEffector, shotEffector, newShotRecoil) = GetEffectorPointers(localPlayer);
 
-                //DebugLogger.LogDebug($"[NoRecoil] Reset pointers - Breath: 0x{breathEffector:X}, Shot: 0x{shotEffector:X}, NewShotRecoil: 0x{newShotRecoil:X}");
-
                 if (ValidatePointers(breathEffector, shotEffector, newShotRecoil))
                 {
-                    //DebugLogger.LogDebug("[NoRecoil] Pointers valid, resetting to defaults...");
-
                     Memory.WriteValue(
                         breathEffector + Offsets.BreathEffector.Intensity,
-                        1.0f);
+                        MemWriteConstants.DefaultIntensity);
 
                     Memory.WriteValue(
                         newShotRecoil + Offsets.NewShotRecoil.IntensitySeparateFactors,
-                        new Vector3(1f, 1f, 1f));
+                        new Vector3(MemWriteConstants.DefaultIntensity, MemWriteConstants.DefaultIntensity, MemWriteConstants.DefaultIntensity));
 
                     Memory.WriteValue(
                         localPlayer.PWA + Offsets.ProceduralWeaponAnimation.Mask,
                         ORIGINAL_PWA_MASK);
-
-                    //DebugLogger.LogDebug("[NoRecoil] Reset to defaults");
-                }
-                else
-                {
-                    //DebugLogger.LogDebug("[NoRecoil] Reset failed - invalid pointers");
                 }
 
-                _lastRecoilAmount = 1.0f;
-                _lastSwayAmount   = 1.0f;
+                _lastRecoilAmount = MemWriteConstants.DefaultIntensity;
+                _lastSwayAmount   = MemWriteConstants.DefaultIntensity;
                 ClearCache();
             }
             catch
             {
-                //DebugLogger.LogDebug($"[NoRecoil] Reset error: {ex}");
-                //DebugLogger.LogDebug($"[NoRecoil] Stack trace: {ex.StackTrace}");
             }
         }
 
@@ -350,8 +301,8 @@ private void ApplyNoRecoil(LocalPlayer localPlayer)
         {
             //DebugLogger.LogDebug("[NoRecoil] OnRaidStart called");
             _lastEnabledState  = default;
-            _lastRecoilAmount  = 1.0f;
-            _lastSwayAmount    = 1.0f;
+            _lastRecoilAmount  = MemWriteConstants.DefaultIntensity;
+            _lastSwayAmount    = MemWriteConstants.DefaultIntensity;
             _lastPwaPtr        = 0;
             ClearCache();
         }

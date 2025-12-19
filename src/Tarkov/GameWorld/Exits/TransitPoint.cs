@@ -33,55 +33,65 @@ using LoneEftDmaRadar.UI.Skia;
 
 namespace LoneEftDmaRadar.Tarkov.GameWorld.Exits
 {
+    /// <summary>
+    /// Represents a transit point for traveling between maps.
+    /// </summary>
     public sealed class TransitPoint : IExitPoint, IWorldEntity, IMapEntity, IMouseoverEntity
     {
+        #region Constructor
+
         public TransitPoint(TarkovDataManager.TransitElement transit)
         {
             Description = transit.Description;
             _position = transit.Position.AsVector3();
         }
 
+        #endregion
+
+        #region Properties
+
+        /// <summary>
+        /// Description/name of the transit point.
+        /// </summary>
         public string Description { get; }
 
-        #region Interfaces
-
         private readonly Vector3 _position;
+        
+        /// <summary>
+        /// World position of the transit point.
+        /// </summary>
         public ref readonly Vector3 Position => ref _position;
+        
+        /// <summary>
+        /// Screen position for mouseover detection.
+        /// </summary>
         public Vector2 MouseoverPosition { get; set; }
 
+        #endregion
+
+        #region Drawing
+
+        /// <summary>
+        /// Draws the transit point on the radar map.
+        /// </summary>
         public void Draw(SKCanvas canvas, EftMapParams mapParams, LocalPlayer localPlayer)
         {
             var heightDiff = Position.Y - localPlayer.Position.Y;
             var paint = SKPaints.PaintExfilTransit;
             var point = Position.ToMapPos(mapParams.Map).ToZoomedPos(mapParams);
+            
             MouseoverPosition = new Vector2(point.X, point.Y);
-            SKPaints.ShapeOutline.StrokeWidth = 2f;
-            if (heightDiff > 1.85f) // exfil is above player
-            {
-                using var path = point.GetUpArrow(6.5f);
-                canvas.DrawPath(path, SKPaints.ShapeOutline);
-                canvas.DrawPath(path, paint);
-            }
-            else if (heightDiff < -1.85f) // exfil is below player
-            {
-                using var path = point.GetDownArrow(6.5f);
-                canvas.DrawPath(path, SKPaints.ShapeOutline);
-                canvas.DrawPath(path, paint);
-            }
-            else // exfil is level with player
-            {
-                float size = 4.75f * App.Config.UI.UIScale;
-                canvas.DrawCircle(point, size, SKPaints.ShapeOutline);
-                canvas.DrawCircle(point, size, paint);
-            }
+            ExitPointRenderer.DrawMarker(canvas, point, paint, heightDiff);
         }
 
+        /// <summary>
+        /// Draws the mouseover tooltip for this transit point.
+        /// </summary>
         public void DrawMouseover(SKCanvas canvas, EftMapParams mapParams, LocalPlayer localPlayer)
         {
             Position.ToMapPos(mapParams.Map).ToZoomedPos(mapParams).DrawMouseoverText(canvas, Description);
         }
 
         #endregion
-
     }
 }

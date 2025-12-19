@@ -198,14 +198,14 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Player
             try
             {
                 // Try multiple count offsets
-                var count1 = Memory.ReadValue<int>(dictPtr + 0x20);
-                var count2 = Memory.ReadValue<int>(dictPtr + 0x40);
-                var count = (count1 > 0 && count1 < 1000) ? count1 : count2;
+                var count1 = Memory.ReadValue<int>(dictPtr + PlayerConstants.DictionaryCountOffset1);
+                var count2 = Memory.ReadValue<int>(dictPtr + PlayerConstants.DictionaryCountOffset2);
+                var count = (count1 > 0 && count1 < PlayerConstants.MaxWishlistCount) ? count1 : count2;
 
-                if (count <= 0 || count > 500)
+                if (count <= 0 || count > PlayerConstants.MaxWishlistItems)
                     return;
 
-                var entriesPtr = Memory.ReadPtr(dictPtr + 0x18);
+                var entriesPtr = Memory.ReadPtr(dictPtr + PlayerConstants.DictionaryEntriesOffset);
                 if (entriesPtr == 0)
                     return;
 
@@ -218,7 +218,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Player
                     foreach (var keyOffset in keyOffsets)
                     {
                         var tempResults = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        var entriesStart = entriesPtr + 0x20; // Skip array header
+                        var entriesStart = entriesPtr + PlayerConstants.DictionaryEntriesStartOffset;
                         
                         for (int i = 0; i < count; i++)
                         {
@@ -226,12 +226,14 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Player
                             {
                                 var entryAddr = entriesStart + (ulong)(i * entrySize);
                                 // MongoID._stringId is at offset 0x10 within MongoID
-                                var stringIdPtr = Memory.ReadPtr(entryAddr + (ulong)keyOffset + 0x10);
+                                var stringIdPtr = Memory.ReadPtr(entryAddr + (ulong)keyOffset + PlayerConstants.MongoIdStringIdOffset);
                                 
-                                if (stringIdPtr != 0 && stringIdPtr > 0x10000)
+                                if (stringIdPtr != 0 && stringIdPtr > PlayerConstants.MinWishlistPointer)
                                 {
-                                    var itemId = Memory.ReadUnicodeString(stringIdPtr, 64, true);
-                                    if (!string.IsNullOrEmpty(itemId) && itemId.Length >= 20 && itemId.Length <= 30)
+                                    var itemId = Memory.ReadUnicodeString(stringIdPtr, PlayerConstants.WishlistItemStringLength, true);
+                                    if (!string.IsNullOrEmpty(itemId) && 
+                                        itemId.Length >= PlayerConstants.MinWishlistItemIdLength && 
+                                        itemId.Length <= PlayerConstants.MaxWishlistItemIdLength)
                                     {
                                         tempResults.Add(itemId);
                                     }

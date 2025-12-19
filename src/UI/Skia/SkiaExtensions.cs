@@ -49,14 +49,13 @@ namespace LoneEftDmaRadar.UI.Skia
 
         private static SKPath CreateMineMarkerPath()
         {
-            const float len = 3.5f; // base, unscaled length
             var path = new SKPath();
 
-            path.MoveTo(-len, len);
-            path.LineTo(len, -len);
+            path.MoveTo(-SKConstants.MineMarkerLength, SKConstants.MineMarkerLength);
+            path.LineTo(SKConstants.MineMarkerLength, -SKConstants.MineMarkerLength);
 
-            path.MoveTo(-len, -len);
-            path.LineTo(len, len);
+            path.MoveTo(-SKConstants.MineMarkerLength, -SKConstants.MineMarkerLength);
+            path.LineTo(SKConstants.MineMarkerLength, SKConstants.MineMarkerLength);
 
             return path;
         }
@@ -64,11 +63,10 @@ namespace LoneEftDmaRadar.UI.Skia
         private static SKPath CreateHazardMarkerPath()
         {
             // Triangle hazard marker (warning symbol)
-            const float size = 6f;
             var path = new SKPath();
-            path.MoveTo(0, -size);           // Top
-            path.LineTo(-size, size * 0.6f); // Bottom left
-            path.LineTo(size, size * 0.6f);  // Bottom right
+            path.MoveTo(0, -SKConstants.HazardMarkerTriangleSize);           // Top
+            path.LineTo(-SKConstants.HazardMarkerTriangleSize, SKConstants.HazardMarkerTriangleSize * SKConstants.HazardMarkerBottomMultiplier); // Bottom left
+            path.LineTo(SKConstants.HazardMarkerTriangleSize, SKConstants.HazardMarkerTriangleSize * SKConstants.HazardMarkerBottomMultiplier);  // Bottom right
             path.Close();
             return path;
         }
@@ -190,7 +188,7 @@ namespace LoneEftDmaRadar.UI.Skia
         /// <summary>
         /// Gets a drawable 'Up Arrow'. IDisposable. Applies UI Scaling internally.
         /// </summary>
-        public static SKPath GetUpArrow(this SKPoint point, float size = 6f, float offsetX = 0f, float offsetY = 0f)
+        public static SKPath GetUpArrow(this SKPoint point, float size = SKConstants.DefaultArrowSize, float offsetX = 0f, float offsetY = 0f)
         {
             float scale = size * App.Config.UI.UIScale;
             float tx = point.X + offsetX;
@@ -210,7 +208,7 @@ namespace LoneEftDmaRadar.UI.Skia
         /// <summary>
         /// Gets a drawable 'Down Arrow'. IDisposable. Applies UI Scaling internally.
         /// </summary>
-        public static SKPath GetDownArrow(this SKPoint point, float size = 6f, float offsetX = 0f, float offsetY = 0f)
+        public static SKPath GetDownArrow(this SKPoint point, float size = SKConstants.DefaultArrowSize, float offsetX = 0f, float offsetY = 0f)
         {
             float scale = size * App.Config.UI.UIScale;
             float tx = point.X + offsetX;

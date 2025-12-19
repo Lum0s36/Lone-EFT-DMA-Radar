@@ -39,9 +39,12 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Collections
     public sealed class UnityHashSet<T> : PooledMemory<UnityHashSet<T>.MemHashEntry>
         where T : unmanaged
     {
-        public const uint CountOffset = 0x3C;
-        public const uint ArrOffset = 0x18;
-        public const uint ArrStartOffset = 0x20;
+        /// <summary>Offset to count field. Use UnityConstants.HashSetCountOffset instead.</summary>
+        public const uint CountOffset = UnityConstants.HashSetCountOffset;
+        /// <summary>Offset to slots pointer. Use UnityConstants.HashSetSlotsOffset instead.</summary>
+        public const uint ArrOffset = UnityConstants.HashSetSlotsOffset;
+        /// <summary>Offset to first slot. Use UnityConstants.HashSetSlotsStartOffset instead.</summary>
+        public const uint ArrStartOffset = UnityConstants.HashSetSlotsStartOffset;
 
         private UnityHashSet() : base(0) { }
         private UnityHashSet(int count) : base(count) { }
@@ -54,8 +57,8 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Collections
         /// <returns></returns>
         public static UnityHashSet<T> Create(ulong addr, bool useCache = true)
         {
-            var count = MemoryInterface.Memory.ReadValue<int>(addr + CountOffset, useCache);
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(count, 16384, nameof(count));
+            var count = MemoryInterface.Memory.ReadValue<int>(addr + UnityConstants.HashSetCountOffset, useCache);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(count, UnityConstants.MaxCollectionCount, nameof(count));
             var hs = new UnityHashSet<T>(count);
             try
             {
@@ -63,7 +66,7 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Collections
                 {
                     return hs;
                 }
-                var hashSetBase = MemoryInterface.Memory.ReadPtr(addr + ArrOffset, useCache) + ArrStartOffset;
+                var hashSetBase = MemoryInterface.Memory.ReadPtr(addr + UnityConstants.HashSetSlotsOffset, useCache) + UnityConstants.HashSetSlotsStartOffset;
                 MemoryInterface.Memory.ReadSpan(hashSetBase, hs.Span, useCache);
                 return hs;
             }

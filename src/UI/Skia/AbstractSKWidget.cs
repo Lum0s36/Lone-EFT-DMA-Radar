@@ -53,10 +53,10 @@ namespace LoneEftDmaRadar.UI.Skia
         private bool _disposed;
         private bool _isFocused;
 
-        protected virtual float TitlePadding => 2.5f * ScaleFactor;
-        protected virtual float BaseFontSize => 9f;
-        protected virtual float TitleBarBaseHeight => 12.5f;
-        protected virtual float ResizeGlyphBaseSize => 10.5f;
+        protected virtual float TitlePadding => SKConstants.WidgetTitlePaddingMultiplier * ScaleFactor;
+        protected virtual float BaseFontSize => SKConstants.WidgetBaseFontSize;
+        protected virtual float TitleBarBaseHeight => SKConstants.WidgetTitleBarBaseHeight;
+        protected virtual float ResizeGlyphBaseSize => SKConstants.WidgetResizeGlyphBaseSize;
 
         private float TitleBarHeight => TitleBarBaseHeight * ScaleFactor;
         private SKRect TitleBar => new(Rectangle.Left, Rectangle.Top, Rectangle.Right, Rectangle.Top + TitleBarHeight);
@@ -373,8 +373,9 @@ namespace LoneEftDmaRadar.UI.Skia
 
         protected virtual SKSize ClampSize(SKSize requested)
         {
-            const float min = 16f;
-            return new SKSize(Math.Max(min, requested.Width), Math.Max(min, requested.Height));
+            return new SKSize(
+                Math.Max(SKConstants.WidgetMinSize, requested.Width), 
+                Math.Max(SKConstants.WidgetMinSize, requested.Height));
         }
 
         private void ToggleMinimized()
@@ -482,19 +483,19 @@ namespace LoneEftDmaRadar.UI.Skia
 
         private static SKPaint WidgetBackgroundPaint { get; } = new()
         {
-            Color = SKColors.Black.WithAlpha(0xBE),
-            StrokeWidth = 1,
+            Color = SKColors.Black.WithAlpha(SKConstants.WidgetBackgroundAlpha),
+            StrokeWidth = SKConstants.ESPStrokeWidth,
             Style = SKPaintStyle.Fill
         };
 
         private static SKPaint TitleBarPaint { get; } = new()
         {
             Color = SKColors.Gray,
-            StrokeWidth = 0.5f,
+            StrokeWidth = SKConstants.WidgetTitleBarStrokeWidth,
             Style = SKPaintStyle.Fill
         };
 
-        protected virtual SKFont Font { get; } = new(CustomFonts.NeoSansStdRegular, 9f)
+        protected virtual SKFont Font { get; } = new(CustomFonts.NeoSansStdRegular, SKConstants.WidgetBaseFontSize)
         {
             Subpixel = true
         };
@@ -502,14 +503,14 @@ namespace LoneEftDmaRadar.UI.Skia
         private static SKPaint ButtonBackgroundPaint { get; } = new()
         {
             Color = SKColors.LightGray,
-            StrokeWidth = 0.1f,
+            StrokeWidth = SKConstants.WidgetButtonStrokeWidth,
             Style = SKPaintStyle.Fill
         };
 
         private static SKPaint SymbolPaint { get; } = new()
         {
             Color = SKColors.Black,
-            StrokeWidth = 2f,
+            StrokeWidth = SKConstants.WidgetSymbolStrokeWidth,
             Style = SKPaintStyle.Stroke,
             IsAntialias = true
         };

@@ -38,7 +38,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Player
     {
         private readonly ulong _btrView;
         private readonly ulong _posAddr;
-        private Vector3 _position = new(9999, 0, 9999); // Initialize far off-map
+        private Vector3 _position = new(PlayerConstants.BtrOffMapPositionX, 0, PlayerConstants.BtrOffMapPositionZ);
 
         public override ref readonly Vector3 Position
         {

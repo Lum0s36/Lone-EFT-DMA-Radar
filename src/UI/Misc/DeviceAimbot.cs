@@ -31,7 +31,7 @@ namespace LoneEftDmaRadar.UI.Misc
         // Cached paints/fonts for debug overlay (avoid per-frame allocations)
         private static readonly SKPaint s_bgPaint = new SKPaint
         {
-            Color = new SKColor(0, 0, 0, 180),
+            Color = new SKColor(0, 0, 0, DeviceAimbotConstants.DebugBackgroundAlpha),
             Style = SKPaintStyle.Fill,
             IsAntialias = true
         };
@@ -50,7 +50,7 @@ namespace LoneEftDmaRadar.UI.Misc
             Color = SKColors.Black,
             IsAntialias = true,
             Style = SKPaintStyle.Stroke,
-            StrokeWidth = 3
+            StrokeWidth = DeviceAimbotConstants.DebugShadowStrokeWidth
         };
         private static readonly SKFont s_monoFont = SKFonts.InfoWidgetFont; // Consolas 12, subpixel AA
 
@@ -85,7 +85,7 @@ namespace LoneEftDmaRadar.UI.Misc
         private float _lastSwayAmount = 1.0f;
 #pragma warning restore CS0169, CS0414
         
-        private readonly List<string> _debugLines = new List<string>(64);
+        private readonly List<string> _debugLines = new List<string>(DeviceAimbotConstants.DebugLinesCapacity);
         #endregion
 
         private void SendDeviceMove(int dx, int dy)
@@ -180,7 +180,7 @@ namespace LoneEftDmaRadar.UI.Misc
                     {
                         _debugStatus = "Not in raid";
                         ResetTarget();
-                        Thread.Sleep(100);
+                        Thread.Sleep(DeviceAimbotConstants.NotInRaidSleepMs);
                         continue;
                     }
 
@@ -188,7 +188,7 @@ namespace LoneEftDmaRadar.UI.Misc
                     {
                         _debugStatus = "LocalPlayer == null";
                         ResetTarget();
-                        Thread.Sleep(50);
+                        Thread.Sleep(DeviceAimbotConstants.NoPlayerSleepMs);
                         continue;
                     }
 
@@ -200,7 +200,7 @@ namespace LoneEftDmaRadar.UI.Misc
                     {
                         _debugStatus = "Aimbot & MemoryAim disabled (NoRecoil still active if enabled)";
                         ResetTarget();
-                        Thread.Sleep(100);
+                        Thread.Sleep(DeviceAimbotConstants.NotInRaidSleepMs);
                         continue;
                     }
 
@@ -209,7 +209,7 @@ namespace LoneEftDmaRadar.UI.Misc
                     {
                         _debugStatus = "Device/KMBoxNet NOT connected (enable MemoryAim to use without device)";
                         ResetTarget();
-                        Thread.Sleep(250);
+                        Thread.Sleep(DeviceAimbotConstants.DisconnectedSleepMs);
                         continue;
                     }
 
@@ -217,7 +217,7 @@ namespace LoneEftDmaRadar.UI.Misc
                     {
                         _debugStatus = "Game instance == null";
                         ResetTarget();
-                        Thread.Sleep(50);
+                        Thread.Sleep(DeviceAimbotConstants.NoPlayerSleepMs);
                         continue;
                     }
 
@@ -226,7 +226,7 @@ namespace LoneEftDmaRadar.UI.Misc
                     {
                         _debugStatus = "Waiting for aim key (IsEngaged == false)";
                         ResetTarget();
-                        Thread.Sleep(10);
+                        Thread.Sleep(DeviceAimbotConstants.NotEngagedSleepMs);
                         continue;
                     }
 
@@ -243,7 +243,7 @@ namespace LoneEftDmaRadar.UI.Misc
                         _debugStatus = "No valid weapon / fireport (needed for prediction/MemoryAim)";
                         ResetTarget();
                         _hasLastFireport = false;
-                        Thread.Sleep(16);
+                        Thread.Sleep(DeviceAimbotConstants.NoFireportSleepMs);
                         continue;
                     }
 
@@ -266,7 +266,7 @@ namespace LoneEftDmaRadar.UI.Misc
                         if (_lockedTarget == null)
                         {
                             _debugStatus = "No target in FOV / range";
-                            Thread.Sleep(10);
+                            Thread.Sleep(DeviceAimbotConstants.NotEngagedSleepMs);
                             continue;
                         }
                     }
@@ -287,14 +287,14 @@ namespace LoneEftDmaRadar.UI.Misc
                     // 8) Aim
                     AimAtTarget(localPlayer, _lockedTarget, fireportPosOpt);
 
-                    Thread.Sleep(8); // ~125Hz
+                    Thread.Sleep(DeviceAimbotConstants.MainLoopSleepMs);
                 }
                 catch (Exception ex)
                 {
                     _debugStatus = $"Error: {ex.Message}";
                     DebugLogger.LogDebug($"[DeviceAimbot] Error: {ex}");
                     ResetTarget();
-                    Thread.Sleep(100);
+                    Thread.Sleep(DeviceAimbotConstants.ErrorSleepMs);
                 }
             }
 
@@ -392,7 +392,7 @@ namespace LoneEftDmaRadar.UI.Misc
 private bool ShouldTargetPlayer(AbstractPlayer player, LocalPlayer localPlayer)
 {
     // DEBUG: Log every rejection reason for first few players
-    bool isDebugPlayer = _dbgTotalPlayers <= 3;
+    bool isDebugPlayer = _dbgTotalPlayers <= DeviceAimbotConstants.DebugPlayerLimit;
     
     if (isDebugPlayer)
         DebugLogger.LogDebug($"\n[DeviceAimbot] === Checking Player #{_dbgTotalPlayers} ===");
@@ -636,7 +636,7 @@ private void ApplyMemoryAim(LocalPlayer localPlayer, Vector3 targetPosition)
         // 2) Current view angles from MovementContext._rotation (NEW OFFSET)
         ulong movementContext = localPlayer.MovementContext;
         Vector2 viewAngles = Memory.ReadValue<Vector2>(
-            movementContext + Offsets.MovementContext._rotation, // 0xC4 in your dump
+            movementContext + Offsets.MovementContext._rotation,
             false
         );
 
@@ -650,17 +650,16 @@ private void ApplyMemoryAim(LocalPlayer localPlayer, Vector3 targetPosition)
             0.0f,
             DegToRad(delta.Y)
         );
-        const float maxRad = 0.35f; // ~20 degrees
-        gunAngle.X = Math.Clamp(gunAngle.X, -maxRad, maxRad);
-        gunAngle.Z = Math.Clamp(gunAngle.Z, -maxRad, maxRad);
+        gunAngle.X = Math.Clamp(gunAngle.X, -DeviceAimbotConstants.MaxGunAngleRadians, DeviceAimbotConstants.MaxGunAngleRadians);
+        gunAngle.Z = Math.Clamp(gunAngle.Z, -DeviceAimbotConstants.MaxGunAngleRadians, DeviceAimbotConstants.MaxGunAngleRadians);
 
-        // 5) Write to _shotDirection (same as old 0x22C)
+        // 5) Write to _shotDirection
         ulong shotDirectionAddr = localPlayer.PWA + Offsets.ProceduralWeaponAnimation._shotDirection;
         if (!MemDMA.IsValidVirtualAddress(shotDirectionAddr))
             return;
 
         // Keep the exact weird mapping you had before
-        Vector3 writeVec = new Vector3(gunAngle.X, -1.0f, gunAngle.Z * -1.0f);
+        Vector3 writeVec = new Vector3(gunAngle.X, DeviceAimbotConstants.ShotDirectionYComponent, gunAngle.Z * -1.0f);
         Memory.WriteValue(shotDirectionAddr, writeVec);
 
         DebugLogger.LogDebug($"[MemoryAim] Fireport: {fpPos}");
@@ -735,14 +734,11 @@ private static float RadToDeg(float radians)
                 // Apply prediction
                 Vector3 predictedPos = targetPos;
 
-                // Add drop compensation
-                //predictedPos.Y += sim.DropCompensation;
-
                 // Add lead for moving targets
                 if (targetVelocity != Vector3.Zero)
                 {
                     float speed = targetVelocity.Length();
-                    if (speed > 0.5f) // Only predict if moving faster than 0.5 m/s
+                    if (speed > DeviceAimbotConstants.MinVelocityForPrediction)
                     {
                         Vector3 lead = targetVelocity * sim.TravelTime;
                         predictedPos += lead;
@@ -824,10 +820,10 @@ private static float RadToDeg(float radians)
             // Generic 7.62-ish defaults to keep prediction running when reads fail.
             return new BallisticsInfo
             {
-                BulletMassGrams = 8.0f,
-                BulletDiameterMillimeters = 7.6f,
-                BallisticCoefficient = 0.35f,
-                BulletSpeed = 800f
+                BulletMassGrams = DeviceAimbotConstants.FallbackBulletMassGrams,
+                BulletDiameterMillimeters = DeviceAimbotConstants.FallbackBulletDiameterMm,
+                BallisticCoefficient = DeviceAimbotConstants.FallbackBallisticCoefficient,
+                BulletSpeed = DeviceAimbotConstants.FallbackBulletSpeed
             };
         }
 
@@ -838,7 +834,7 @@ private static float RadToDeg(float radians)
                 var slotsPtr = _memory.ReadPtr(itemBase + Offsets.LootItemMod.Slots, false);
                 using var slots = UnityArray<ulong>.Create(slotsPtr, true);
 
-                if (slots.Count > 100) // Sanity check
+                if (slots.Count > DeviceAimbotConstants.MaxSlotsCount) // Sanity check
                     return;
 
                 foreach (var slot in slots.Span)
@@ -1022,22 +1018,26 @@ private static float RadToDeg(float radians)
                     lines.Add($"  Recoil:     {App.Config.MemWrites.NoRecoilAmount:F0}%");
                     lines.Add($"  Sway:       {App.Config.MemWrites.NoSwayAmount:F0}%");
                 }
-                float x = 10;
-                float y = 30;
-                float lineHeight = 18;
+                float x = DeviceAimbotConstants.DebugOverlayX;
+                float y = DeviceAimbotConstants.DebugOverlayY;
+                float lineHeight = DeviceAimbotConstants.DebugLineHeight;
 
                 // Background size
                 float maxWidth = 0;
                 foreach (var line in lines)
                 {
-                    // Measure using SKFont (avoids deprecated SKPaint.MeasureText)
                     var width = s_monoFont.MeasureText(line, out _);
                     if (width > maxWidth) maxWidth = width;
                 }
 
-                canvas.DrawRect(x - 5, y - 20, maxWidth + 25, lines.Count * lineHeight + 20, s_bgPaint);
+                canvas.DrawRect(
+                    x - DeviceAimbotConstants.DebugOverlayPadding, 
+                    y - DeviceAimbotConstants.DebugOverlayExtraHeight, 
+                    maxWidth + DeviceAimbotConstants.DebugOverlayExtraWidth, 
+                    lines.Count * lineHeight + DeviceAimbotConstants.DebugOverlayExtraHeight, 
+                    s_bgPaint);
 
-                // Text with shadow (fake bold / shading)
+                // Text with shadow
                 foreach (var line in lines)
                 {
                     var paint = line.StartsWith("===") ||
@@ -1048,8 +1048,7 @@ private static float RadToDeg(float radians)
                         ? s_headerPaint
                         : s_textPaint;
 
-                    // New DrawText overload: specify align + SKFont + SKPaint
-                    canvas.DrawText(line, x + 1.5f, y + 1.5f, SKTextAlign.Left, s_monoFont, s_shadowPaint);
+                    canvas.DrawText(line, x + DeviceAimbotConstants.DebugShadowOffset, y + DeviceAimbotConstants.DebugShadowOffset, SKTextAlign.Left, s_monoFont, s_shadowPaint);
                     canvas.DrawText(line, x, y, SKTextAlign.Left, s_monoFont, paint);
                     y += lineHeight;
                 }

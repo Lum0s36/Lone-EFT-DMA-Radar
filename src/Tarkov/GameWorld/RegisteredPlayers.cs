@@ -94,7 +94,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld
         public int GetPlayerCount()
         {
             var count = Memory.ReadValue<int>(this + UnityList<byte>.CountOffset, false);
-            if (count < 0 || count > 256)
+            if (count < 0 || count > GameWorldConstants.MaxPlayerCount)
                 throw new ArgumentOutOfRangeException(nameof(count));
             return count;
         }

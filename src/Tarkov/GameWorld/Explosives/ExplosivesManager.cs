@@ -77,7 +77,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Explosives
             try
             {
                 var grenades = Memory.ReadPtr(_localGameWorld + Offsets.GameWorld.Grenades);
-                var grenadesListPtr = Memory.ReadPtr(grenades + 0x18);
+                var grenadesListPtr = Memory.ReadPtr(grenades + ExplosiveConstants.GrenadesListOffset);
                 using var grenadesList = UnityList<ulong>.Create(grenadesListPtr, false);
                 foreach (var grenade in grenadesList)
                 {

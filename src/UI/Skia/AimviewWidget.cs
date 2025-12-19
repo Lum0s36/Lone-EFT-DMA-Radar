@@ -470,7 +470,10 @@ namespace LoneEftDmaRadar.UI.Skia
                 var paint = GetPaint(player);
 
                 // Calculate distance-based scale for line thickness
-                float distanceScale = Math.Clamp(50f / Math.Max(distance, 5f), 0.5f, 2.5f);
+                float distanceScale = Math.Clamp(
+                    SKConstants.AimviewSkeletonDistanceBase / Math.Max(distance, SKConstants.AimviewMinSkeletonDistance), 
+                    SKConstants.AimviewSkeletonScaleMin, 
+                    SKConstants.AimviewSkeletonScaleMax);
 
                 foreach (var (from, to) in _boneConnections)
                 {
@@ -486,7 +489,7 @@ namespace LoneEftDmaRadar.UI.Skia
                     if (TryProject(p1, out var s1) && TryProject(p2, out var s2))
                     {
                         // Scale line thickness with distance
-                        float t = Math.Max(0.5f, 1.5f * distanceScale);
+                        float t = Math.Max(SKConstants.AimviewSkeletonLineThicknessMin, SKConstants.AimviewSkeletonLineThicknessBase * distanceScale);
                         paint.StrokeWidth = t;
                         _canvas.DrawLine(s1.X, s1.Y, s2.X, s2.Y, paint);
                     }
@@ -499,14 +502,14 @@ namespace LoneEftDmaRadar.UI.Skia
                     if (head != Vector3.Zero && !float.IsNaN(head.X) && !float.IsInfinity(head.X))
                     {
                         var headTop = head;
-                        headTop.Y += 0.18f; // small offset to estimate head height
+                        headTop.Y += SKConstants.AimviewHeadOffset;
 
                         if (TryProject(head, out var headScreen) && TryProject(headTop, out var headTopScreen))
                         {
                             // Calculate radius based on projected head height
                             var dy = MathF.Abs(headTopScreen.Y - headScreen.Y);
-                            float radius = dy * 0.65f;
-                            radius = Math.Clamp(radius, 2f, 12f);
+                            float radius = dy * SKConstants.AimviewHeadRadiusMultiplier;
+                            radius = Math.Clamp(radius, SKConstants.AimviewHeadRadiusMin, SKConstants.AimviewHeadRadiusMax);
                             
                             // Draw circle (not filled, just outline)
                             paint.Style = SKPaintStyle.Stroke;
@@ -750,17 +753,15 @@ namespace LoneEftDmaRadar.UI.Skia
             Vector3 refPos = localPlayer?.Position ?? CameraManagerNew.CameraPosition;
             float dist = Vector3.Distance(refPos, world);
             
-            // ✅ Perspective-based scaling - markers get SMALLER at greater distances (natural view)
-            // At close range (5m): scale ~2.0x (larger, more visible)
-            // At medium range (10m): scale ~1.0x (normal size)  
-            // At far range (30m+): scale ~0.33x (smaller, less obtrusive)
-            const float referenceDistance = 10f; // Reference distance for 1.0x scale
-            scale = Math.Clamp(referenceDistance / Math.Max(dist, 1f), 0.3f, 3f);
+            // Perspective-based scaling - markers get SMALLER at greater distances (natural view)
+            scale = Math.Clamp(
+                SKConstants.AimviewReferenceDistance / Math.Max(dist, 1f), 
+                SKConstants.AimviewPerspectiveScaleMin, 
+                SKConstants.AimviewPerspectiveScaleMax);
             
             // Check if within widget bounds (allow some tolerance for edge cases)
-            const float tolerance = 100f;
-            if (scr.X < -tolerance || scr.X > _bitmap.Width + tolerance || 
-                scr.Y < -tolerance || scr.Y > _bitmap.Height + tolerance)
+            if (scr.X < -SKConstants.AimviewEdgeTolerance || scr.X > _bitmap.Width + SKConstants.AimviewEdgeTolerance || 
+                scr.Y < -SKConstants.AimviewEdgeTolerance || scr.Y > _bitmap.Height + SKConstants.AimviewEdgeTolerance)
             {
                 return false;
             }

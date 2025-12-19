@@ -34,7 +34,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Player.Helpers
 
         private async Task InitAsnyc()
         {
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < PlayerConstants.EquipmentInitRetryCount; i++)
             {
                 try
                 {
@@ -43,7 +43,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Player.Helpers
                     var equipment = Memory.ReadPtr(inventory + Offsets.Inventory.Equipment);
                     var slotsPtr = Memory.ReadPtr(equipment + Offsets.InventoryEquipment._cachedSlots);
                     using var slotsArray = UnityArray<ulong>.Create(slotsPtr, true);
-                    ArgumentOutOfRangeException.ThrowIfLessThan(slotsArray.Count, 1);
+                    ArgumentOutOfRangeException.ThrowIfLessThan(slotsArray.Count, PlayerConstants.MinEquipmentSlotCount);
 
                     foreach (var slotPtr in slotsArray)
                     {
@@ -64,7 +64,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Player.Helpers
                 }
                 finally
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(2));
+                    await Task.Delay(TimeSpan.FromSeconds(PlayerConstants.EquipmentInitRetryDelaySeconds));
                 }
             }
         }

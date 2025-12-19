@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO.Ports;
 using System.Linq;
-using System.Management; // <-- NuGet: System.Management
+using System.Management;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -34,49 +34,12 @@ namespace LoneEftDmaRadar.UI.Misc
     {
         // --- gating for device smooth/bezier so we don't overlap commands ---
 #pragma warning disable CS0169 // Field is never used - reserved for future smooth/bezier gating
-        private long _makcuBusyUntilTicks;             // when it's safe to send the next smooth/bezier
+        private long _makcuBusyUntilTicks;
 #pragma warning restore CS0169
         private static readonly double _ticksPerMs = (double)Stopwatch.Frequency / 1000.0;
 
-        // You can tune this if your firmware runs ~2-4ms per segment
-        private const int MakcuSegmentMsDefault = 3;
-
-        // Optional: expose via config if you want
-        private static int GetSegmentMs() => MakcuSegmentMsDefault;
-
-        // Optional: enable Bezier from config if you add a toggle later.
-        // For now: try Bezier when segments > 1.
+        private static int GetSegmentMs() => DeviceControllerConstants.MakcuSegmentMsDefault;
         private static bool UseBezierForSmoothing => true;
-
-        #region Makcu Identity (edit if needed)
-        private const string Makcu_FRIENDLY_NAME = "USB-Enhanced-SERIAL CH343";
-        private const string Makcu_VID = "1A86";
-        private const string Makcu_PID = "55D3";
-        private const string Makcu_SERIAL_FRAGMENT = "58A6074578"; // optional; helps if multiple adapters
-        private const string Makcu_EXPECT_SIGNATURE = "km.MAKCU";
-        private static readonly string[] MakcuSignatures = new[]
-        {
-            Makcu_EXPECT_SIGNATURE,
-            "km.net",          // KMBox NET / KMNET firmware
-            "kmbox.net",
-            "km.kmboxnet",
-            "kmnet"
-        };
-        #endregion
-
-        #region Generic Serial Identity
-        // CH340/CH341/CH9102 are common for slower km.* firmware variants at 115200 baud.
-        private static readonly (string Vid, string Pid, string Friendly, string SerialFragment)[] GenericSerialCandidates =
-        {
-            (Makcu_VID, "7523", "USB-SERIAL CH340", null),
-            (Makcu_VID, "5523", "USB-SERIAL CH9102", null)
-        };
-
-        private static readonly string[] GenericFriendlyFallbacks = new[]
-        {
-            "USB-SERIAL", "CH340", "CH341", "CH9102"
-        };
-        #endregion
 
         #region Fields / State
 
@@ -84,8 +47,6 @@ namespace LoneEftDmaRadar.UI.Misc
         /// What kind of km.* device is currently connected (Makcu vs Generic).
         /// </summary>
         public static KmDeviceKind DeviceKind { get; private set; } = KmDeviceKind.Unknown;
-
-        private static readonly byte[] change_cmd = { 0xDE, 0xAD, 0x05, 0x00, 0xA5, 0x00, 0x09, 0x3D, 0x00 };
 
         public static bool connected = false;
         private static SerialPort port = null;
@@ -96,31 +57,19 @@ namespace LoneEftDmaRadar.UI.Misc
 
         public static Dictionary<int, bool> bState { get; private set; }
 
-        private static readonly HashSet<byte> validBytes = new HashSet<byte>
-        {
-            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-            0x08, 0x09, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15,
-            0x16, 0x17, 0x19, 0x1F
-        };
-
         private static readonly Random r = new Random();
-        private const int DEFAULT_OPEN_BAUD = 115200;   // initial open
-        private const int HIGH_BAUD = 4000000;          // Makcu high speed
         #endregion
 
         #region Auto-Connect Helpers (VID/PID/Name + Signature Check)
-        /// <summary>
-        /// One-shot: find COM port by VID/PID or friendly name (with optional serial fragment),
-        /// connect via your existing flow, and verify "km.MAKCU".
-        /// </summary>
+
         public static bool AutoConnectMakcu()
         {
             try
             {
                 DeviceKind = KmDeviceKind.Unknown;
                 string com =
-                    TryGetComByVidPid(Makcu_VID, Makcu_PID, Makcu_SERIAL_FRAGMENT)
-                    ?? TryGetComByFriendlyName(Makcu_FRIENDLY_NAME, Makcu_SERIAL_FRAGMENT);
+                    TryGetComByVidPid(DeviceControllerConstants.MakcuVid, DeviceControllerConstants.MakcuPid, DeviceControllerConstants.MakcuSerialFragment)
+                    ?? TryGetComByFriendlyName(DeviceControllerConstants.MakcuFriendlyName, DeviceControllerConstants.MakcuSerialFragment);
 
                 if (string.IsNullOrEmpty(com))
                 {
@@ -128,7 +77,7 @@ namespace LoneEftDmaRadar.UI.Misc
                     return false;
                 }
 
-                connect(com); // use your original method to keep behavior identical
+                connect(com);
 
                 if (!connected)
                 {
@@ -139,7 +88,7 @@ namespace LoneEftDmaRadar.UI.Misc
 
                 if (!ValidateMakcuSignature())
                 {
-                    DebugLogger.LogDebug("[-] Device did not return expected signature (km.MAKCU).");
+                    DebugLogger.LogDebug($"[-] Device did not return expected signature ({DeviceControllerConstants.MakcuExpectSignature}).");
                     disconnect();
                     DeviceKind = KmDeviceKind.Unknown;
                     return false;
@@ -157,19 +106,15 @@ namespace LoneEftDmaRadar.UI.Misc
             }
         }
 
-        private static bool ValidateMakcuSignature(int timeoutMs = 800)
+        private static bool ValidateMakcuSignature(int timeoutMs = DeviceControllerConstants.SignatureValidationTimeout)
         {
             try
             {
                 if (port == null || !port.IsOpen) return false;
 
-                // make sure we don't read stale bytes
                 port.DiscardInBuffer();
-
-                // Send probe
                 port.Write("km.version()\r");
 
-                // Temporarily set a read timeout for the probe
                 int oldTimeout = port.ReadTimeout;
                 port.ReadTimeout = timeoutMs;
 
@@ -184,18 +129,17 @@ namespace LoneEftDmaRadar.UI.Misc
                     return false;
                 }
 
-                // Accept starts-with or contains to be tolerant of echoes
-                bool ok = line.StartsWith(Makcu_EXPECT_SIGNATURE, StringComparison.OrdinalIgnoreCase)
-                       || line.Contains(Makcu_EXPECT_SIGNATURE, StringComparison.OrdinalIgnoreCase);
+                bool ok = line.StartsWith(DeviceControllerConstants.MakcuExpectSignature, StringComparison.OrdinalIgnoreCase)
+                       || line.Contains(DeviceControllerConstants.MakcuExpectSignature, StringComparison.OrdinalIgnoreCase);
 
                 if (ok)
                 {
-                    version = line; // keep your cache in sync
+                    version = line;
                     DebugLogger.LogDebug($"[ValidateMakcu] Signature VALID");
                 }
                 else
                 {
-                    DebugLogger.LogDebug($"[ValidateMakcu] Signature INVALID (expected '{Makcu_EXPECT_SIGNATURE}')");
+                    DebugLogger.LogDebug($"[ValidateMakcu] Signature INVALID (expected '{DeviceControllerConstants.MakcuExpectSignature}')");
                 }
 
                 return ok;
@@ -212,7 +156,7 @@ namespace LoneEftDmaRadar.UI.Misc
             if (string.IsNullOrEmpty(line))
                 return false;
 
-            return MakcuSignatures.Any(sig => line.Contains(sig, StringComparison.OrdinalIgnoreCase))
+            return DeviceControllerConstants.MakcuSignatures.Any(sig => line.Contains(sig, StringComparison.OrdinalIgnoreCase))
                    || line.StartsWith("km.", StringComparison.OrdinalIgnoreCase)
                    || line.Contains("km.", StringComparison.OrdinalIgnoreCase);
         }
@@ -334,13 +278,6 @@ namespace LoneEftDmaRadar.UI.Misc
             return devices;
         }
 
-        /// <summary>
-        /// Best-effort auto-connect using (in order):
-        /// 1) Previously saved COM port
-        /// 2) VID/PID friendly-name probe (Makcu)
-        /// 3) VID/PID/friendly probe for generic km.* serial devices
-        /// 4) Iterate all COM ports (generic fallback)
-        /// </summary>
         public static bool TryAutoConnect(string lastComPort = null)
         {
             if (connected)
@@ -360,15 +297,12 @@ namespace LoneEftDmaRadar.UI.Misc
                 DebugLogger.LogDebug($"[Device] AutoConnect saved port failed: {ex.Message}");
             }
 
-            // Try VID/PID detection
             if (AutoConnectMakcu())
                 return true;
 
-            // Try known CH340/CH341/CH9102-style adapters at 115200
             if (AutoConnectGenericKm())
                 return true;
 
-            // Try all enumerated COM ports as a last resort
             foreach (var dev in EnumerateSerialDevices())
             {
                 try
@@ -429,25 +363,30 @@ namespace LoneEftDmaRadar.UI.Misc
 
         private static bool AutoConnectGenericKm()
         {
-            foreach (var candidate in GenericSerialCandidates)
+            // Try VID/PID for CH340
+            string com = TryGetComByVidPid(DeviceControllerConstants.MakcuVid, DeviceControllerConstants.Ch340Pid, null)
+                      ?? TryGetComByFriendlyName(DeviceControllerConstants.Ch340FriendlyName, null);
+            if (!string.IsNullOrEmpty(com))
             {
-                string com =
-                    TryGetComByVidPid(candidate.Vid, candidate.Pid, candidate.SerialFragment)
-                    ?? (string.IsNullOrEmpty(candidate.Friendly)
-                        ? null
-                        : TryGetComByFriendlyName(candidate.Friendly, candidate.SerialFragment));
-
-                if (string.IsNullOrEmpty(com))
-                    continue;
-
-                DebugLogger.LogDebug($"[GenericKM] AutoConnect: trying {com} ({candidate.Vid}:{candidate.Pid} / {candidate.Friendly})");
+                DebugLogger.LogDebug($"[GenericKM] AutoConnect: trying {com} (CH340)");
                 if (ConnectGenericKm(com))
                     return true;
             }
 
-            foreach (var friendly in GenericFriendlyFallbacks)
+            // Try VID/PID for CH9102
+            com = TryGetComByVidPid(DeviceControllerConstants.MakcuVid, DeviceControllerConstants.Ch9102Pid, null)
+               ?? TryGetComByFriendlyName(DeviceControllerConstants.Ch9102FriendlyName, null);
+            if (!string.IsNullOrEmpty(com))
             {
-                string com = TryGetComByFriendlyName(friendly);
+                DebugLogger.LogDebug($"[GenericKM] AutoConnect: trying {com} (CH9102)");
+                if (ConnectGenericKm(com))
+                    return true;
+            }
+
+            // Try fallback friendly names
+            foreach (var friendly in DeviceControllerConstants.GenericFriendlyFallbacks)
+            {
+                com = TryGetComByFriendlyName(friendly);
                 if (string.IsNullOrEmpty(com))
                     continue;
 
@@ -481,10 +420,6 @@ namespace LoneEftDmaRadar.UI.Misc
 
         #region Connect / Disconnect / Reconnect
 
-        /// <summary>
-        /// Original Makcu-specific connect (high-speed km.* adapter).
-        /// IMPORTANT: left unchanged, so Makcu path stays working.
-        /// </summary>
         public static void connect(string com)
         {
             try
@@ -493,48 +428,41 @@ namespace LoneEftDmaRadar.UI.Misc
 
                 if (port == null)
                 {
-                    port = new SerialPort(com, DEFAULT_OPEN_BAUD, Parity.None, 8, StopBits.One)
+                    port = new SerialPort(com, DeviceControllerConstants.DefaultOpenBaud, Parity.None, 8, StopBits.One)
                     {
-                        ReadTimeout = 500,
-                        WriteTimeout = 500,
+                        ReadTimeout = DeviceControllerConstants.DefaultReadTimeout,
+                        WriteTimeout = DeviceControllerConstants.DefaultWriteTimeout,
                         Encoding = Encoding.ASCII,
-                        NewLine = "\n" // for ReadLine()
+                        NewLine = "\n"
                     };
                 }
                 else
                 {
                     if (port.IsOpen) port.Close();
                     port.PortName = com;
-                    port.BaudRate = DEFAULT_OPEN_BAUD;
+                    port.BaudRate = DeviceControllerConstants.DefaultOpenBaud;
                 }
 
                 port.Open();
                 if (!port.IsOpen)
                     return;
 
-                // small wait before mode switch
-                Thread.Sleep(150);
-                port.Write(change_cmd, 0, change_cmd.Length);
+                Thread.Sleep(DeviceControllerConstants.PortOpenDelayMs);
+                port.Write(DeviceControllerConstants.ChangeModeCommand, 0, DeviceControllerConstants.ChangeModeCommand.Length);
                 port.BaseStream.Flush();
 
-                // switch to high speed
-                //port.BaudRate = HIGH_BAUD;
-                SetBaud(HIGH_BAUD);
+                SetBaud(DeviceControllerConstants.HighBaud);
                 GetVersion();
-                Thread.Sleep(150);
+                Thread.Sleep(DeviceControllerConstants.PortOpenDelayMs);
 
                 DebugLogger.LogDebug($"[+] Device connected to {port.PortName} at {port.BaudRate} baudrate");
 
-                // enable button stream + disable echo
                 port.Write("km.buttons(1)\r\n");
                 port.Write("km.echo(0)\r\n");
                 port.DiscardInBuffer();
 
-                // NOTE: Don't start listener yet - caller will start it after validation
-                // start_listening();
-
                 bState = new Dictionary<int, bool>();
-                for (int i = 1; i <= 5; i++)
+                for (int i = 1; i <= DeviceControllerConstants.MouseButtonCount; i++)
                     bState[i] = false;
 
                 connected = true;
@@ -558,7 +486,7 @@ namespace LoneEftDmaRadar.UI.Misc
             };
             port.Write(cmd, 0, cmd.Length);
             port.BaseStream.Flush();
-            Thread.Sleep(50);
+            Thread.Sleep(DeviceControllerConstants.BaudChangeDelayMs);
             port.BaudRate = baud;
         }
 
@@ -572,7 +500,6 @@ namespace LoneEftDmaRadar.UI.Misc
                 DebugLogger.LogDebug("[!] Closing port...");
                 runReader = false;
 
-                // try to disable buttons to quiet stream
                 if (port.IsOpen)
                 {
                     try
@@ -602,7 +529,7 @@ namespace LoneEftDmaRadar.UI.Misc
         public static async void reconnect_device(string com)
         {
             disconnect();
-            await Task.Delay(200);
+            await Task.Delay(DeviceControllerConstants.ReconnectDelayMs);
             try
             {
                 if (port != null && !port.IsOpen)
@@ -618,10 +545,6 @@ namespace LoneEftDmaRadar.UI.Misc
             }
         }
 
-        /// <summary>
-        /// Try Makcu handshake on a specific COM.
-        /// Uses your existing connect(), then validates signature.
-        /// </summary>
         public static bool TryConnectMakcuOnPort(string com)
         {
             DeviceKind = KmDeviceKind.Unknown;
@@ -649,10 +572,6 @@ namespace LoneEftDmaRadar.UI.Misc
             return true;
         }
 
-        /// <summary>
-        /// Connect a generic KM device (KMBox, CH340, etc.) that speaks km.*
-        /// at 115200 with NO change_cmd / baud change.
-        /// </summary>
         public static bool ConnectGenericKm(string com)
         {
             DeviceKind = KmDeviceKind.Unknown;
@@ -662,26 +581,26 @@ namespace LoneEftDmaRadar.UI.Misc
             {
                 if (port == null)
                 {
-                    port = new SerialPort(com, DEFAULT_OPEN_BAUD, Parity.None, 8, StopBits.One)
+                    port = new SerialPort(com, DeviceControllerConstants.DefaultOpenBaud, Parity.None, 8, StopBits.One)
                     {
-                        ReadTimeout  = 500,
-                        WriteTimeout = 500,
-                        Encoding     = Encoding.ASCII,
-                        NewLine      = "\n"
+                        ReadTimeout = DeviceControllerConstants.DefaultReadTimeout,
+                        WriteTimeout = DeviceControllerConstants.DefaultWriteTimeout,
+                        Encoding = Encoding.ASCII,
+                        NewLine = "\n"
                     };
                 }
                 else
                 {
                     if (port.IsOpen) port.Close();
                     port.PortName = com;
-                    port.BaudRate = DEFAULT_OPEN_BAUD;
+                    port.BaudRate = DeviceControllerConstants.DefaultOpenBaud;
                 }
 
                 port.Open();
                 if (!port.IsOpen)
                     return false;
 
-                Thread.Sleep(150);
+                Thread.Sleep(DeviceControllerConstants.PortOpenDelayMs);
 
                 // Best-effort: ask for version, but don't require anything specific
                 try
@@ -712,7 +631,7 @@ namespace LoneEftDmaRadar.UI.Misc
                 start_listening();
 
                 bState = new Dictionary<int, bool>();
-                for (int i = 1; i <= 5; i++)
+                for (int i = 1; i <= DeviceControllerConstants.MouseButtonCount; i++)
                     bState[i] = false;
 
                 connected = true;
@@ -736,11 +655,6 @@ namespace LoneEftDmaRadar.UI.Misc
             }
         }
 
-        /// <summary>
-        /// Auto connect on a specific COM:
-        /// 1) Try Makcu handshake (change_cmd + 4M + km.MAKCU signature)
-        /// 2) If that fails, fall back to generic km.* at 115200
-        /// </summary>
         public static bool ConnectAuto(string com)
         {
             // First try Makcu, which uses your existing connect()
@@ -867,7 +781,7 @@ namespace LoneEftDmaRadar.UI.Misc
         {
             if (!connected) return;
 
-            int time = r.Next(10, 100); // randomized press time
+            int time = r.Next(DeviceControllerConstants.MinRandomPressTimeMs, DeviceControllerConstants.MaxRandomPressTimeMs);
             Thread.Sleep(click_delay);
             port.Write($"km.{button}(1)\r");
             Thread.Sleep(time);
@@ -890,12 +804,9 @@ namespace LoneEftDmaRadar.UI.Misc
         public static void start_listening()
         {
             if (button_inputs != null && button_inputs.IsAlive)
-            {
-                // already listening
                 return;
-            }
 
-            Thread.Sleep(500); // allow time for cleanup
+            Thread.Sleep(DeviceControllerConstants.ListenerStartDelayMs);
             runReader = true;
             button_inputs = new Thread(read_buttons)
             {
@@ -914,7 +825,7 @@ namespace LoneEftDmaRadar.UI.Misc
                 {
                     if (!connected || port == null)
                     {
-                        Thread.Sleep(250);
+                        Thread.Sleep(DeviceControllerConstants.ConnectionLostRetryDelayMs);
                         connected = port?.IsOpen == true;
                         continue;
                     }
@@ -924,27 +835,25 @@ namespace LoneEftDmaRadar.UI.Misc
                         if (port.BytesToRead > 0)
                         {
                             int data = port.ReadByte();
-                            if (!validBytes.Contains((byte)data))
+                            if (!DeviceControllerConstants.ValidButtonBytes.Contains((byte)data))
                                 continue;
 
                             byte b = (byte)data;
 
-                            // bits 0..4 -> buttons 1..5
-                            for (int i = 1; i <= 5; i++)
+                            for (int i = 1; i <= DeviceControllerConstants.MouseButtonCount; i++)
                                 bState[i] = (b & (1 << (i - 1))) != 0;
 
                             port.DiscardInBuffer();
                         }
                         else
                         {
-                            // avoid hot-loop when idle
                             Thread.Sleep(1);
                         }
                     }
                     catch
                     {
                         connected = false;
-                        Thread.Sleep(50);
+                        Thread.Sleep(DeviceControllerConstants.ButtonReaderExceptionDelayMs);
                     }
                 }
             });

@@ -11,15 +11,20 @@
         /// </summary>
         public const uint MonoBehaviourOffset = 0x10;
 
+        /// <summary>
+        /// Offset to name string pointer within object class.
+        /// </summary>
+        public const uint NameStringPtrOffset = 0x10;
+
         public static uint[] To_GameObject { get; } = new[] { MonoBehaviourOffset, UnitySDK.UnityOffsets.Component_GameObjectOffset };
-        public static uint[] To_NamePtr { get; } = new uint[] { 0x0, 0x10 };
+        public static uint[] To_NamePtr { get; } = new uint[] { 0x0, NameStringPtrOffset };
 
         /// <summary>
         /// Read the Class Name from any ObjectClass that implements UnityComponent.
         /// </summary>
         /// <param name="objectClass">ObjectClass address.</param>
         /// <returns>Name (string) of the object class given.</returns>
-        public static string ReadName(ulong objectClass, int length = 128, bool useCache = true)
+        public static string ReadName(ulong objectClass, int length = UnityConstants.DefaultStringBufferSize, bool useCache = true)
         {
             var namePtr = Memory.ReadPtrChain(objectClass, useCache, To_NamePtr);
             return Memory.ReadUtf8String(namePtr, length, useCache);

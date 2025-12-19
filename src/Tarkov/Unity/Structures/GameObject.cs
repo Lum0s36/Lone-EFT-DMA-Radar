@@ -16,7 +16,7 @@
         /// </summary>
         /// <returns>Name string.</returns>
         public readonly string GetName() =>
-            Memory.ReadUtf8String(Name, 128);
+            Memory.ReadUtf8String(Name, UnityConstants.MaxGameObjectNameLength);
 
         /// <summary>
         /// Gets a component class from a Game Object.

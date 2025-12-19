@@ -113,7 +113,8 @@ namespace LoneEftDmaRadar.UI.Skia
 
         public QuestHelperWidget(SKGLElement parent, SKRect location, bool minimized, float scale)
             : base(parent, "Quest Helper", new SKPoint(location.Left, location.Top),
-                new SKSize(Math.Max(300, location.Width), Math.Max(200, location.Height)), scale, true)
+                new SKSize(Math.Max(SKConstants.QuestWidgetMinWidth, location.Width), 
+                           Math.Max(SKConstants.QuestWidgetMinHeight, location.Height)), scale, true)
         {
             Minimized = minimized;
             SetScaleFactor(scale);
@@ -451,9 +452,9 @@ namespace LoneEftDmaRadar.UI.Skia
         private void DrawQuestList(SKCanvas canvas)
         {
             var font = SKFonts.InfoWidgetFont;
-            float pad = 5f * ScaleFactor;
-            float questPadding = 8f * ScaleFactor;
-            float objIndent = 20f * ScaleFactor;
+            float pad = SKConstants.QuestWidgetPadding * ScaleFactor;
+            float questPadding = SKConstants.QuestWidgetQuestPadding * ScaleFactor;
+            float objIndent = SKConstants.QuestWidgetObjectiveIndent * ScaleFactor;
 
             // Calculate total content height
             float contentHeight = CalculateContentHeight(font, questPadding);
@@ -491,7 +492,7 @@ namespace LoneEftDmaRadar.UI.Skia
                 y += questPadding / 2;
                 canvas.DrawLine(
                     ClientRectangle.Left + pad, y,
-                    ClientRectangle.Right - pad - (ScaleFactor * 10), y,
+                    ClientRectangle.Right - pad - (ScaleFactor * SKConstants.QuestWidgetScrollbarPadding), y,
                     SeparatorPaint);
                 y += questPadding / 2;
             }
@@ -514,11 +515,11 @@ namespace LoneEftDmaRadar.UI.Skia
             
             // Quest name (white)
             canvas.DrawText(quest.QuestName, new SKPoint(x + traderWidth + sepWidth, y + font.Spacing), SKTextAlign.Left, font, QuestNamePaint);
-            y += font.Spacing + 2f * ScaleFactor;
+            y += font.Spacing + SKConstants.QuestWidgetTitleSpacing * ScaleFactor;
 
             // Objectives header (light blue)
             canvas.DrawText(quest.ObjectivesHeader, new SKPoint(x, y + font.Spacing), SKTextAlign.Left, font, ObjectivesHeaderPaint);
-            y += font.Spacing + 4f * ScaleFactor;
+            y += font.Spacing + SKConstants.QuestWidgetObjectiveSpacing * ScaleFactor;
 
             // Draw objectives
             foreach (var obj in quest.Objectives)
@@ -528,7 +529,7 @@ namespace LoneEftDmaRadar.UI.Skia
 
                 // Type icon (orange)
                 canvas.DrawText(obj.TypeIcon, new SKPoint(x, y + font.Spacing), SKTextAlign.Left, font, TypeIconPaint);
-                float iconWidth = font.MeasureText(obj.TypeIcon) + 5f * ScaleFactor;
+                float iconWidth = font.MeasureText(obj.TypeIcon) + SKConstants.QuestWidgetIconSpacing * ScaleFactor;
 
                 // Description
                 var descPaint = obj.IsCompleted ? ObjectiveCompletedPaint : ObjectiveTextPaint;
@@ -537,12 +538,12 @@ namespace LoneEftDmaRadar.UI.Skia
                 // Progress (right-aligned)
                 if (!string.IsNullOrEmpty(obj.Progress))
                 {
-                    float progressX = ClientRectangle.Right - pad - (ScaleFactor * 10) - font.MeasureText(obj.Progress);
+                    float progressX = ClientRectangle.Right - pad - (ScaleFactor * SKConstants.QuestWidgetScrollbarPadding) - font.MeasureText(obj.Progress);
                     var progressPaint = obj.IsCompleted ? ObjectiveCompletedPaint : ProgressPaint;
                     canvas.DrawText(obj.Progress, new SKPoint(progressX, y + font.Spacing), SKTextAlign.Left, font, progressPaint);
                 }
 
-                y += font.Spacing + 2f * ScaleFactor;
+                y += font.Spacing + SKConstants.QuestWidgetTitleSpacing * ScaleFactor;
             }
 
             return y - startY;
@@ -561,15 +562,15 @@ namespace LoneEftDmaRadar.UI.Skia
         private float EstimateQuestHeight(QuestDisplayEntry quest, SKFont font, float questPadding)
         {
             // Title line + objectives header + each objective
-            return font.Spacing * (2 + quest.Objectives.Count) + (4f * ScaleFactor * quest.Objectives.Count);
+            return font.Spacing * (2 + quest.Objectives.Count) + (SKConstants.QuestWidgetObjectiveSpacing * ScaleFactor * quest.Objectives.Count);
         }
 
         private void DrawScrollbar(SKCanvas canvas)
         {
-            float scrollbarWidth = 6f * ScaleFactor;
-            float scrollbarX = ClientRectangle.Right - scrollbarWidth - 2f;
-            float scrollbarY = ClientRectangle.Top + 2f;
-            float scrollbarHeight = ClientRectangle.Height - 4f;
+            float scrollbarWidth = SKConstants.QuestWidgetScrollbarWidth * ScaleFactor;
+            float scrollbarX = ClientRectangle.Right - scrollbarWidth - SKConstants.QuestWidgetScrollbarMargin;
+            float scrollbarY = ClientRectangle.Top + SKConstants.QuestWidgetScrollbarMargin;
+            float scrollbarHeight = ClientRectangle.Height - SKConstants.QuestWidgetScrollbarMargin * 2;
 
             // Background track
             var trackPaint = new SKPaint
@@ -582,7 +583,7 @@ namespace LoneEftDmaRadar.UI.Skia
 
             // Calculate thumb size and position
             float contentHeight = _maxScrollOffset + ClientRectangle.Height;
-            float thumbHeight = Math.Max(20f, (ClientRectangle.Height / contentHeight) * scrollbarHeight);
+            float thumbHeight = Math.Max(SKConstants.QuestWidgetMinThumbHeight, (ClientRectangle.Height / contentHeight) * scrollbarHeight);
             float thumbY = scrollbarY + (_scrollOffset / Math.Max(1, _maxScrollOffset)) * (scrollbarHeight - thumbHeight);
 
             // Draw thumb
@@ -592,7 +593,8 @@ namespace LoneEftDmaRadar.UI.Skia
                 Style = SKPaintStyle.Fill,
                 IsAntialias = true
             };
-            canvas.DrawRoundRect(scrollbarX, thumbY, scrollbarWidth, thumbHeight, 3f, 3f, thumbPaint);
+            canvas.DrawRoundRect(scrollbarX, thumbY, scrollbarWidth, thumbHeight, 
+                SKConstants.QuestWidgetThumbRadius, SKConstants.QuestWidgetThumbRadius, thumbPaint);
         }
 
         /// <summary>
@@ -600,7 +602,7 @@ namespace LoneEftDmaRadar.UI.Skia
         /// </summary>
         protected override void OnMouseWheel(int delta)
         {
-            float scrollAmount = -(delta / 120f) * SKFonts.InfoWidgetFont.Spacing * 3f;
+            float scrollAmount = -(delta / SKConstants.QuestWidgetMouseWheelDivisor) * SKFonts.InfoWidgetFont.Spacing * SKConstants.QuestWidgetScrollLinesPerTick;
             _scrollOffset = Math.Clamp(_scrollOffset + scrollAmount, 0f, _maxScrollOffset);
         }
 

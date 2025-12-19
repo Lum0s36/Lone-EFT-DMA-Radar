@@ -24,7 +24,7 @@ namespace LoneEftDmaRadar.DMA
     /// </summary>
     public sealed class InputManager
     {
-        private readonly VmmInputManager _input;   // may be null if Win32 backend failed
+        private readonly VmmInputManager _input;
         private readonly WorkerThread _thread;
 
         /// <summary>
@@ -41,7 +41,6 @@ namespace LoneEftDmaRadar.DMA
             }
             catch (Exception ex)
             {
-                // Do NOT throw; this is our failsafe.
                 _input = null;
                 DebugLogger.LogDebug($"[InputManager] Failed to initialize VmmInputManager (Win32 backend). " +
                                 $"Hotkeys will use DeviceAimbot-only fallback if available. {ex}");
@@ -50,7 +49,7 @@ namespace LoneEftDmaRadar.DMA
             _thread = new WorkerThread
             {
                 Name = nameof(InputManager),
-                SleepDuration = TimeSpan.FromMilliseconds(12),
+                SleepDuration = TimeSpan.FromMilliseconds(DMAConstants.InputPollingIntervalMs),
                 SleepMode = WorkerThreadSleepMode.DynamicSleep
             };
             _thread.PerformWork += InputManager_PerformWork;
@@ -139,9 +138,7 @@ namespace LoneEftDmaRadar.DMA
         /// - XBUTTON1  → DeviceAimbotMouseButton.mouse4
         /// - XBUTTON2  → DeviceAimbotMouseButton.mouse5
         /// 
-        /// So users can bind hotkeys to those keys in the hotkey UI ಮತ್ತು
-        /// they will work even when VmmInputManager is unavailable, as long
-        /// as the DeviceAimbot device is connected.
+        /// So users can bind hotkeys to those keys in the hotkey UI
         /// </summary>
         private static bool IsDeviceAimbotKeyDown(Win32VirtualKey vk)
         {
@@ -173,7 +170,6 @@ namespace LoneEftDmaRadar.DMA
                     break;
 
                 default:
-                    // any non-mouse key is not handled by DeviceAimbot
                     return false;
             }
 
@@ -181,10 +177,10 @@ namespace LoneEftDmaRadar.DMA
         }
 
         private static bool IsMouseVirtualKey(Win32VirtualKey vk) =>
-            vk is Win32VirtualKey.LBUTTON 
-            or Win32VirtualKey.RBUTTON 
+            vk is Win32VirtualKey.LBUTTON
+            or Win32VirtualKey.RBUTTON
             or Win32VirtualKey.MBUTTON
-            or Win32VirtualKey.XBUTTON1 
+            or Win32VirtualKey.XBUTTON1
             or Win32VirtualKey.XBUTTON2;
 
         [DllImport("user32.dll")]
@@ -193,17 +189,16 @@ namespace LoneEftDmaRadar.DMA
         private static bool IsMouseAsyncDown(Win32VirtualKey vk)
         {
             var state = GetAsyncKeyState((int)vk);
-            return (state & 0x8000) != 0;
+            return (state & DMAConstants.KeyDownBitMask) != 0;
         }
 
         /// <summary>
         /// Checks if a key is down on the local Radar PC keyboard.
-        /// Uses GetAsyncKeyState to read keyboard state directly from the local machine.
         /// </summary>
         private static bool IsLocalKeyDown(Win32VirtualKey vk)
         {
             var state = GetAsyncKeyState((int)vk);
-            return (state & 0x8000) != 0;
+            return (state & DMAConstants.KeyDownBitMask) != 0;
         }
     }
 }

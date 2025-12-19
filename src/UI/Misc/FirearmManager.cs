@@ -72,7 +72,7 @@ namespace LoneEftDmaRadar.UI.Misc
 
                 if (_hands?.IsWeapon == true)
                 {
-                    if (FireportTransform is UnityTransform fireportTransform) // Validate Fireport Transform
+                    if (FireportTransform is UnityTransform fireportTransform)
                     {
                         try
                         {
@@ -93,19 +93,17 @@ namespace LoneEftDmaRadar.UI.Misc
                             var t = MemoryInterface.Memory.ReadPtrChain(hands, false, Offsets.FirearmController.To_FirePortTransformInternal);
                             FireportTransform = new(t, false);
 
-                            // ✅ Update position AND rotation once to validate
                             var pos = FireportTransform.UpdatePosition();
                             var rot = FireportTransform.GetRotation();
 
-                            // If the fireport is implausibly far (common briefly during weapon swaps), drop and reacquire next tick.
-                            if (Vector3.Distance(pos, _localPlayer.Position) > 100f)
+                            if (Vector3.Distance(pos, _localPlayer.Position) > FirearmConstants.MaxFireportDistanceFromPlayer)
                             {
                                 ResetFireport();
                                 return;
                             }
 
                             FireportPosition = pos;
-                            FireportRotation = rot; // ✅ Store rotation
+                            FireportRotation = rot;
                         }
                         catch
                         {
@@ -114,14 +112,12 @@ namespace LoneEftDmaRadar.UI.Misc
                     }
                     else
                     {
-                        // ✅ Update fireport position AND rotation every frame
                         try
                         {
                             FireportPosition = FireportTransform.UpdatePosition();
                             FireportRotation = FireportTransform.GetRotation();
 
-                            // Sanity: if it jumps far away, reset so we reacquire with the new weapon.
-                            if (Vector3.Distance(FireportPosition.Value, _localPlayer.Position) > 100f)
+                            if (Vector3.Distance(FireportPosition.Value, _localPlayer.Position) > FirearmConstants.MaxFireportDistanceFromPlayer)
                             {
                                 ResetFireport();
                             }
@@ -157,9 +153,9 @@ namespace LoneEftDmaRadar.UI.Misc
             var itemBase = MemoryInterface.Memory.ReadPtr(handsController + Offsets.ItemHandsController.Item, false);
             var itemTemp = MemoryInterface.Memory.ReadPtr(itemBase + Offsets.LootItem.Template, false);
             var itemIdPtr = MemoryInterface.Memory.ReadValue<MongoID>(itemTemp + Offsets.ItemTemplate._id, false);
-            var itemId = itemIdPtr.ReadString(64, false); // Use ReadString() method
+            var itemId = itemIdPtr.ReadString(FirearmConstants.MaxItemIdStringLength, false);
             
-            ArgumentOutOfRangeException.ThrowIfNotEqual(itemId.Length, 24, nameof(itemId));
+            ArgumentOutOfRangeException.ThrowIfNotEqual(itemId.Length, FirearmConstants.BsgItemIdLength, nameof(itemId));
             
             if (!TarkovDataManager.AllItems.TryGetValue(itemId, out var heldItem))
                 return new(handsController);

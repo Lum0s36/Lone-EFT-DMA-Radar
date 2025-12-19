@@ -39,9 +39,12 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Collections
     public sealed class UnityList<T> : PooledMemory<T>
         where T : unmanaged
     {
-        public const uint CountOffset = 0x18;
-        public const uint ArrOffset = 0x10;
-        public const uint ArrStartOffset = 0x20;
+        /// <summary>Offset to count field. Use UnityConstants.ListCountOffset instead.</summary>
+        public const uint CountOffset = UnityConstants.ListCountOffset;
+        /// <summary>Offset to array pointer. Use UnityConstants.ListArrayOffset instead.</summary>
+        public const uint ArrOffset = UnityConstants.ListArrayOffset;
+        /// <summary>Offset to first element. Use UnityConstants.ListArrayStartOffset instead.</summary>
+        public const uint ArrStartOffset = UnityConstants.ListArrayStartOffset;
 
         private UnityList() : base(0) { }
         private UnityList(int count) : base(count) { }
@@ -54,8 +57,8 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Collections
         /// <returns></returns>
         public static UnityList<T> Create(ulong addr, bool useCache = true)
         {
-            var count = MemoryInterface.Memory.ReadValue<int>(addr + CountOffset, useCache);
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(count, 16384, nameof(count));
+            var count = MemoryInterface.Memory.ReadValue<int>(addr + UnityConstants.ListCountOffset, useCache);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(count, UnityConstants.MaxCollectionCount, nameof(count));
             var list = new UnityList<T>(count);
             try
             {
@@ -63,7 +66,7 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Collections
                 {
                     return list;
                 }
-                var listBase = MemoryInterface.Memory.ReadPtr(addr + ArrOffset, useCache) + ArrStartOffset;
+                var listBase = MemoryInterface.Memory.ReadPtr(addr + UnityConstants.ListArrayOffset, useCache) + UnityConstants.ListArrayStartOffset;
                 MemoryInterface.Memory.ReadSpan(listBase, list.Span, useCache);
                 return list;
             }

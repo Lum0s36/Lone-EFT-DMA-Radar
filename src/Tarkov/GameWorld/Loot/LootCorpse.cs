@@ -267,31 +267,31 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Loot
             var heightDiff = Position.Y - localPlayer.Position.Y;
             var point = Position.ToMapPos(mapParams.Map).ToZoomedPos(mapParams);
             MouseoverPosition = new Vector2(point.X, point.Y);
-            SKPaints.ShapeOutline.StrokeWidth = 2f;
+            SKPaints.ShapeOutline.StrokeWidth = LootConstants.OutlineStrokeWidth;
             
             // Get the appropriate paint based on player type
             var (shapePaint, textPaint) = GetCorpsePaints();
             
-            if (heightDiff > 1.45) // loot is above player
+            if (heightDiff > LootConstants.HeightThreshold) // loot is above player
             {
-                using var path = point.GetUpArrow(5);
+                using var path = point.GetUpArrow(LootConstants.ArrowSize);
                 canvas.DrawPath(path, SKPaints.ShapeOutline);
                 canvas.DrawPath(path, shapePaint);
             }
-            else if (heightDiff < -1.45) // loot is below player
+            else if (heightDiff < -LootConstants.HeightThreshold) // loot is below player
             {
-                using var path = point.GetDownArrow(5);
+                using var path = point.GetDownArrow(LootConstants.ArrowSize);
                 canvas.DrawPath(path, SKPaints.ShapeOutline);
                 canvas.DrawPath(path, shapePaint);
             }
             else // loot is level with player
             {
-                var size = 5 * App.Config.UI.UIScale;
+                var size = LootConstants.BaseCircleSize * App.Config.UI.UIScale;
                 canvas.DrawCircle(point, size, SKPaints.ShapeOutline);
                 canvas.DrawCircle(point, size, shapePaint);
             }
 
-            var textPoint = new SKPoint(point.X + 7 * App.Config.UI.UIScale, point.Y + 3 * App.Config.UI.UIScale);
+            var textPoint = new SKPoint(point.X + LootConstants.LabelOffsetX * App.Config.UI.UIScale, point.Y + LootConstants.LabelOffsetY * App.Config.UI.UIScale);
 
             // Draw ALL important items ABOVE the name (only for AI corpses, not PMC)
             if (IsAICorpse)

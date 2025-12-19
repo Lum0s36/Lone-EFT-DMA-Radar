@@ -56,8 +56,6 @@ namespace LoneEftDmaRadar.DMA
         private DeviceAimbot _deviceAimbot;
         public static DeviceAimbot DeviceAimbot { get; private set; }
 
-        private const string GAME_PROCESS_NAME = "EscapeFromTarkov.exe";
-        internal const uint MAX_READ_SIZE = 0x1000u * 1500u;
         private static readonly string _mmap = Path.Combine(App.ConfigPath.FullName, "mmap.txt");
         private readonly Vmm _vmm;
         private readonly InputManager _input;
@@ -404,9 +402,8 @@ namespace LoneEftDmaRadar.DMA
         /// </summary>
         private void LoadProcess()
         {
-
-            if (!_vmm.PidGetFromName(GAME_PROCESS_NAME, out uint pid))
-                throw new InvalidOperationException($"Unable to find '{GAME_PROCESS_NAME}'");
+            if (!_vmm.PidGetFromName(DMAConstants.GameProcessName, out uint pid))
+                throw new InvalidOperationException($"Unable to find '{DMAConstants.GameProcessName}'");
             _pid = pid;
         }
 
@@ -415,7 +412,7 @@ namespace LoneEftDmaRadar.DMA
         /// </summary>
         private void LoadModules()
         {
-            var unityBase = _vmm.ProcessGetModuleBase(_pid, "UnityPlayer.dll");
+            var unityBase = _vmm.ProcessGetModuleBase(_pid, DMAConstants.UnityPlayerDll);
             unityBase.ThrowIfInvalidVirtualAddress(nameof(unityBase));
             GOM = GameObjectManager.GetAddr(unityBase);
             UnityBase = unityBase;
@@ -515,7 +512,7 @@ namespace LoneEftDmaRadar.DMA
             where T : unmanaged
         {
             uint cb = (uint)checked(Unsafe.SizeOf<T>() * span.Length);
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(cb, MAX_READ_SIZE, nameof(cb));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(cb, DMAConstants.MaxReadSize, nameof(cb));
             var flags = useCache ? VmmFlags.NONE : VmmFlags.NOCACHE;
 
             if (!_vmm.MemReadSpan(_pid, addr, span, flags))
@@ -532,15 +529,15 @@ namespace LoneEftDmaRadar.DMA
             where T : unmanaged
         {
             uint cb = (uint)checked(Unsafe.SizeOf<T>() * span.Length);
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(cb, MAX_READ_SIZE, nameof(cb));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(cb, DMAConstants.MaxReadSize, nameof(cb));
             var buffer2 = new T[span.Length].AsSpan();
             var buffer3 = new T[span.Length].AsSpan();
             if (!_vmm.MemReadSpan(_pid, addr, buffer3, VmmFlags.NOCACHE))
                 throw new VmmException("Memory Read Failed!");
-            Thread.SpinWait(5);
+            Thread.SpinWait(DMAConstants.VerificationSpinWait);
             if (!_vmm.MemReadSpan(_pid, addr, buffer2, VmmFlags.NOCACHE))
                 throw new VmmException("Memory Read Failed!");
-            Thread.SpinWait(5);
+            Thread.SpinWait(DMAConstants.VerificationSpinWait);
             if (!_vmm.MemReadSpan(_pid, addr, span, VmmFlags.NOCACHE))
                 throw new VmmException("Memory Read Failed!");
             if (!span.SequenceEqual(buffer2) || !span.SequenceEqual(buffer3) || !buffer2.SequenceEqual(buffer3))
@@ -642,7 +639,7 @@ namespace LoneEftDmaRadar.DMA
         /// </summary>
         public string ReadUtf8String(ulong addr, int cb, bool useCache = true)
         {
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(cb, 0x1000, nameof(cb));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(cb, DMAConstants.MaxStringReadSize, nameof(cb));
             var flags = useCache ? VmmFlags.NONE : VmmFlags.NOCACHE;
             return _vmm.MemReadString(_pid, addr, cb, Encoding.UTF8, flags) ??
                 throw new VmmException("Memory Read Failed!");
@@ -653,9 +650,9 @@ namespace LoneEftDmaRadar.DMA
         /// </summary>
         public string ReadUnicodeString(ulong addr, int cb = 128, bool useCache = true)
         {
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(cb, 0x1000, nameof(cb));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(cb, DMAConstants.MaxStringReadSize, nameof(cb));
             var flags = useCache ? VmmFlags.NONE : VmmFlags.NOCACHE;
-            return _vmm.MemReadString(_pid, addr + 0x14, cb, Encoding.Unicode, flags) ??
+            return _vmm.MemReadString(_pid, addr + DMAConstants.UnicodeStringOffset, cb, Encoding.Unicode, flags) ??
                 throw new VmmException("Memory Read Failed!");
         }
 
@@ -705,11 +702,11 @@ namespace LoneEftDmaRadar.DMA
         public void ThrowIfProcessNotRunning()
         {
             _vmm.ForceFullRefresh();
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < DMAConstants.ProcessCheckRetryCount; i++)
             {
                 try
                 {
-                    if (!_vmm.PidGetFromName(GAME_PROCESS_NAME, out uint pid))
+                    if (!_vmm.PidGetFromName(DMAConstants.GameProcessName, out uint pid))
                         throw new InvalidOperationException();
                     if (pid != _pid)
                         throw new InvalidOperationException();
@@ -717,7 +714,7 @@ namespace LoneEftDmaRadar.DMA
                 }
                 catch
                 {
-                    Thread.Sleep(150);
+                    Thread.Sleep(DMAConstants.ProcessCheckRetryDelayMs);
                 }
             }
 
@@ -744,7 +741,7 @@ namespace LoneEftDmaRadar.DMA
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsValidVirtualAddress(ulong va)
         {
-            return va >= 0x10000 && ((long)va << 16) >> 16 == (long)va;
+            return va >= DMAConstants.MinValidVirtualAddress && ((long)va << 16) >> 16 == (long)va;
         }
 
         /// <summary>
@@ -754,7 +751,7 @@ namespace LoneEftDmaRadar.DMA
         /// <param name="va">Virtual address.</param>
         /// <returns>Page-aligned virtual address.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ulong PAGE_ALIGN(ulong va) => va & ~(0x1000ul - 1);
+        public static ulong PAGE_ALIGN(ulong va) => va & ~(DMAConstants.PageSize - 1);
 
         /// <summary>
         /// The BYTE_OFFSET macro takes a virtual address and returns the byte offset of that address within the page.
@@ -763,7 +760,7 @@ namespace LoneEftDmaRadar.DMA
         /// <param name="va">virtual address.</param>
         /// <returns>Offset portion of the virtual address within the page.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static uint BYTE_OFFSET(ulong va) => (uint)(va & (0x1000ul - 1));
+        public static uint BYTE_OFFSET(ulong va) => (uint)(va & (DMAConstants.PageSize - 1));
 
         /// <summary>
         /// The ADDRESS_AND_SIZE_TO_SPAN_PAGES macro returns the number of pages that a virtual range spans.
@@ -775,7 +772,7 @@ namespace LoneEftDmaRadar.DMA
         /// <returns>Returns the number of pages spanned by the virtual range starting at Va.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ulong ADDRESS_AND_SIZE_TO_SPAN_PAGES(ulong va, ulong size) =>
-            (BYTE_OFFSET(va) + size + (0x1000ul - 1)) >> 12;
+            (BYTE_OFFSET(va) + size + (DMAConstants.PageSize - 1)) >> 12;
 
         /// <summary>
         /// Returns a length aligned to 8 bytes.

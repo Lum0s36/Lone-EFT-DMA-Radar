@@ -85,7 +85,7 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Structures
                 while (currentObject.ThisObject != 0x0 && currentObject.ThisObject != lastObject.ThisObject)
                 {
                     var objectNamePtr = Memory.ReadPtr(currentObject.ThisObject + UnitySDK.UnityOffsets.GameObject_NameOffset);
-                    var objectNameStr = Memory.ReadUtf8String(objectNamePtr, 64);
+                    var objectNameStr = Memory.ReadUtf8String(objectNamePtr, UnityConstants.DefaultStringBufferSize);
                     if (objectNameStr.Equals(objectName, StringComparison.OrdinalIgnoreCase))
                         return currentObject.ThisObject;
 

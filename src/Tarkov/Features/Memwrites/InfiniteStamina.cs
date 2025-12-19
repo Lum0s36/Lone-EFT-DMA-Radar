@@ -26,9 +26,6 @@ namespace LoneEftDmaRadar.Tarkov.Features.MemWrites
 
         private const byte INF_STAM_SOURCE_STATE_NAME = (byte)Enums.EPlayerState.Sprint;
         private const byte INF_STAM_TARGET_STATE_NAME = (byte)Enums.EPlayerState.Transition;
-        private const float MAX_STAMINA = 100f;
-        private const float MAX_OXYGEN = 350f;
-        private const float REFILL_THRESHOLD = 0.33f; // refill when below 33%
 
         public override bool Enabled
         {
@@ -36,8 +33,7 @@ namespace LoneEftDmaRadar.Tarkov.Features.MemWrites
             set => App.Config.MemWrites.InfiniteStaminaEnabled = value;
         }
 
-        // Old version also ran at ~1s cadence
-        protected override TimeSpan Delay => TimeSpan.FromSeconds(1);
+        protected override TimeSpan Delay => TimeSpan.FromSeconds(MemWriteConstants.InfiniteStaminaDelaySeconds);
 
         public override void TryApply(LocalPlayer localPlayer)
         {
@@ -106,20 +102,14 @@ namespace LoneEftDmaRadar.Tarkov.Features.MemWrites
             }
 
             // Mirror old logic: only queue writes when under threshold
-            if (currentStamina < MAX_STAMINA * REFILL_THRESHOLD)
+            if (currentStamina < MemWriteConstants.MaxStamina * MemWriteConstants.RefillThreshold)
             {
-                writes.Add(staminaObj + Offsets.PhysicalValue.Current, MAX_STAMINA);
-
-                // Optional: if you want logs like the old ScatterWriteHandle callbacks:
-                // DebugLogger.LogDebug($"[InfiniteStamina] Stamina refilled: {currentStamina:F1} -> {MAX_STAMINA:F1}");
+                writes.Add(staminaObj + Offsets.PhysicalValue.Current, MemWriteConstants.MaxStamina);
             }
 
-            if (currentOxygen < MAX_OXYGEN * REFILL_THRESHOLD)
+            if (currentOxygen < MemWriteConstants.MaxOxygen * MemWriteConstants.RefillThreshold)
             {
-                writes.Add(oxygenObj + Offsets.PhysicalValue.Current, MAX_OXYGEN);
-
-                // Optional logging:
-                // DebugLogger.LogDebug($"[InfiniteStamina] Oxygen refilled: {currentOxygen:F1} -> {MAX_OXYGEN:F1}");
+                writes.Add(oxygenObj + Offsets.PhysicalValue.Current, MemWriteConstants.MaxOxygen);
             }
         }
 
@@ -272,12 +262,12 @@ namespace LoneEftDmaRadar.Tarkov.Features.MemWrites
 
         private static bool ValidateStaminaValue(float stamina)
         {
-            return stamina >= 0f && stamina <= 500f;
+            return stamina >= 0f && stamina <= MemWriteConstants.MaxValidStamina;
         }
 
         private static bool ValidateOxygenValue(float oxygen)
         {
-            return oxygen >= 0f && oxygen <= 1000f;
+            return oxygen >= 0f && oxygen <= MemWriteConstants.MaxValidOxygen;
         }
 
         private void ClearCache()
@@ -315,7 +305,7 @@ namespace LoneEftDmaRadar.Tarkov.Features.MemWrites
 
             public StaminaWriteBatch()
             {
-                _entries = new Entry[4]; // tiny fixed capacity is enough
+                _entries = new Entry[MemWriteConstants.StaminaWriteBatchInitialCapacity];
                 _count   = 0;
             }
 

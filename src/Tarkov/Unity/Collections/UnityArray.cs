@@ -39,8 +39,10 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Collections
     public sealed class UnityArray<T> : PooledMemory<T>
         where T : unmanaged
     {
-        public const uint CountOffset = 0x18;
-        public const uint ArrBaseOffset = 0x20;
+        /// <summary>Offset to count field. Use UnityConstants.ArrayCountOffset instead.</summary>
+        public const uint CountOffset = UnityConstants.ArrayCountOffset;
+        /// <summary>Offset to first element. Use UnityConstants.ArrayBaseOffset instead.</summary>
+        public const uint ArrBaseOffset = UnityConstants.ArrayBaseOffset;
 
         private UnityArray() : base(0) { }
         private UnityArray(int count) : base(count) { }
@@ -53,8 +55,8 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Collections
         /// <returns></returns>
         public static UnityArray<T> Create(ulong addr, bool useCache = true)
         {
-            var count = MemoryInterface.Memory.ReadValue<int>(addr + CountOffset, useCache);
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(count, 16384, nameof(count));
+            var count = MemoryInterface.Memory.ReadValue<int>(addr + UnityConstants.ArrayCountOffset, useCache);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(count, UnityConstants.MaxCollectionCount, nameof(count));
             var array = new UnityArray<T>(count);
             try
             {
@@ -62,7 +64,7 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Collections
                 {
                     return array;
                 }
-                MemoryInterface.Memory.ReadSpan(addr + ArrBaseOffset, array.Span, useCache);
+                MemoryInterface.Memory.ReadSpan(addr + UnityConstants.ArrayBaseOffset, array.Span, useCache);
                 return array;
             }
             catch

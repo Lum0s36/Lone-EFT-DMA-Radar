@@ -34,7 +34,6 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Structures
 {
     public sealed class UnityTransform
     {
-        private const int MAX_ITERATIONS = 4000;
         private readonly bool _useCache;
         private readonly int _index;
         private readonly ulong _hierarchyAddr;
@@ -48,13 +47,11 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Structures
 
         public UnityTransform(ulong transformInternal, bool useCache = false)
         {
-            //DebugLogger.LogDebug(transformInternal.ToString("X"));
-            /// Constructor
             TransformInternal = transformInternal;
             _useCache = useCache;
 
             var ta = Memory.ReadValue<TransformAccess>(transformInternal, useCache);
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(ta.Index, 128000, nameof(ta.Index)); // Sanity check since this is used to size vertices reads
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(ta.Index, UnityConstants.MaxTransformIndex, nameof(ta.Index));
             _index = ta.Index;
             ta.Hierarchy.ThrowIfInvalidVirtualAddress(nameof(ta.Hierarchy));
             _hierarchyAddr = ta.Hierarchy;
@@ -63,7 +60,6 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Structures
             transformHierarchy.Indices.ThrowIfInvalidVirtualAddress(nameof(transformHierarchy.Indices));
             IndicesAddr = transformHierarchy.Indices;
             VerticesAddr = transformHierarchy.Vertices;
-            /// Populate Indices once for the Life of the Transform.
             _indices = ReadIndices();
         }
 
@@ -111,7 +107,7 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Structures
                 int iterations = 0;
                 while (index >= 0)
                 {
-                    ArgumentOutOfRangeException.ThrowIfGreaterThan(iterations++, MAX_ITERATIONS, nameof(iterations));
+                    ArgumentOutOfRangeException.ThrowIfGreaterThan(iterations++, UnityConstants.MaxTransformIterations, nameof(iterations));
                     var parent = vertices[index];
 
                     worldPos = parent.q.Multiply(worldPos);
@@ -151,7 +147,7 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Structures
                 int iterations = 0;
                 while (index >= 0)
                 {
-                    ArgumentOutOfRangeException.ThrowIfGreaterThan(iterations++, MAX_ITERATIONS, nameof(iterations));
+                    ArgumentOutOfRangeException.ThrowIfGreaterThan(iterations++, UnityConstants.MaxTransformIterations, nameof(iterations));
                     var parent = vertices[index];
 
                     worldRot = parent.q * worldRot;
@@ -232,7 +228,7 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Structures
                 int iterations = 0;
                 while (index >= 0)
                 {
-                    ArgumentOutOfRangeException.ThrowIfGreaterThan(iterations++, MAX_ITERATIONS, nameof(iterations));
+                    ArgumentOutOfRangeException.ThrowIfGreaterThan(iterations++, UnityConstants.MaxTransformIterations, nameof(iterations));
                     var parent = vertices[index];
 
                     worldPos *= parent.s;
@@ -276,7 +272,7 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Structures
                 int iterations = 0;
                 while (index >= 0)
                 {
-                    ArgumentOutOfRangeException.ThrowIfGreaterThan(iterations++, MAX_ITERATIONS, nameof(iterations));
+                    ArgumentOutOfRangeException.ThrowIfGreaterThan(iterations++, UnityConstants.MaxTransformIterations, nameof(iterations));
                     var parent = vertices[index];
 
                     worldPos = parent.q.Multiply(worldPos);
@@ -356,31 +352,25 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Structures
 
     public static class UnityTransformExtensions
     {
-        private static readonly Vector3 _left = new Vector3(-1, 0, 0);
-        private static readonly Vector3 _right = new(1, 0, 0);
-        private static readonly Vector3 _up = new(0, 1, 0);
-        private static readonly Vector3 _down = new(0, -1, 0);
-        private static readonly Vector3 _forward = new(0, 0, 1);
-
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Vector3 Left(this Quaternion q) =>
-            q.Multiply(_left);
+            q.Multiply(UnityConstants.Left);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Vector3 Right(this Quaternion q) =>
-            q.Multiply(_right);
+            q.Multiply(UnityConstants.Right);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Vector3 Up(this Quaternion q) =>
-            q.Multiply(_up);
+            q.Multiply(UnityConstants.Up);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Vector3 Down(this Quaternion q) =>
-            q.Multiply(_down);
+            q.Multiply(UnityConstants.Down);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Vector3 Forward(this Quaternion q) =>
-            q.Multiply(_forward);
+            q.Multiply(UnityConstants.Forward);
 
         /// <summary>
         /// Convert Local Direction to World Direction.

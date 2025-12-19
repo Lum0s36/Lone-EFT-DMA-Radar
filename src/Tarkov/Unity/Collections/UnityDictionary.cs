@@ -41,9 +41,12 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Collections
         where TKey : unmanaged
         where TValue : unmanaged
     {
-        public const uint CountOffset = 0x40;
-        public const uint EntriesOffset = 0x18;
-        public const uint EntriesStartOffset = 0x20;
+        /// <summary>Offset to count field. Use UnityConstants.DictionaryCountOffset instead.</summary>
+        public const uint CountOffset = UnityConstants.DictionaryCountOffset;
+        /// <summary>Offset to entries pointer. Use UnityConstants.DictionaryEntriesOffset instead.</summary>
+        public const uint EntriesOffset = UnityConstants.DictionaryEntriesOffset;
+        /// <summary>Offset to first entry. Use UnityConstants.DictionaryEntriesStartOffset instead.</summary>
+        public const uint EntriesStartOffset = UnityConstants.DictionaryEntriesStartOffset;
 
         private UnityDictionary() : base(0) { }
         private UnityDictionary(int count) : base(count) { }
@@ -56,8 +59,8 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Collections
         /// <returns></returns>
         public static UnityDictionary<TKey, TValue> Create(ulong addr, bool useCache = true)
         {
-            var count = MemoryInterface.Memory.ReadValue<int>(addr + CountOffset, useCache);
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(count, 16384, nameof(count));
+            var count = MemoryInterface.Memory.ReadValue<int>(addr + UnityConstants.DictionaryCountOffset, useCache);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(count, UnityConstants.MaxCollectionCount, nameof(count));
             var dict = new UnityDictionary<TKey, TValue>(count);
             try
             {
@@ -65,7 +68,7 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Collections
                 {
                     return dict;
                 }
-                var dictBase = MemoryInterface.Memory.ReadPtr(addr + EntriesOffset, useCache) + EntriesStartOffset;
+                var dictBase = MemoryInterface.Memory.ReadPtr(addr + UnityConstants.DictionaryEntriesOffset, useCache) + UnityConstants.DictionaryEntriesStartOffset;
                 MemoryInterface.Memory.ReadSpan(dictBase, dict.Span, useCache); // Single read into mem buffer
                 return dict;
             }

@@ -97,7 +97,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Player
 
         public int GetPoseLevel()
         {
-             return Memory.ReadValue<int>(MovementContext + 0xD0); // 0xD0 = PoseLevel in MovementContext
+             return Memory.ReadValue<int>(MovementContext + PlayerConstants.MovementContextPoseLevelOffset);
         }
 
         public float GetFov()
@@ -197,7 +197,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Player
                 try
                 {
                     var chain = _transformInternalChain.ToArray();
-                    chain[chain.Length - 2] = UnityList<byte>.ArrStartOffset + (uint)bone * 0x8;
+                    chain[chain.Length - 2] = UnityList<byte>.ArrStartOffset + (uint)bone * PlayerConstants.BonePointerStride;
                     
                     var ti = Memory.ReadPtrChain(this, false, chain);
                     var transform = new UnityTransform(ti);
@@ -248,8 +248,8 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Player
             Offsets.PlayerBody.SkeletonRootJoint,
             Offsets.DizSkinningSkeleton._values,
             UnityList<byte>.ArrOffset,
-            UnityList<byte>.ArrStartOffset + (uint)Bones.HumanBase * 0x8,
-            0x10
+            UnityList<byte>.ArrStartOffset + (uint)Bones.HumanBase * PlayerConstants.BonePointerStride,
+            PlayerConstants.TransformInternalOffset
         ];
     }
 }

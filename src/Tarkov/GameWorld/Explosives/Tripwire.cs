@@ -88,8 +88,8 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Explosives
             if (!_isActive)
                 return;
             var circlePosition = Position.ToMapPos(mapParams.Map).ToZoomedPos(mapParams);
-            var size = 5f * App.Config.UI.UIScale;
-            SKPaints.ShapeOutline.StrokeWidth = SKPaints.PaintExplosives.StrokeWidth + 2f * App.Config.UI.UIScale;
+            var size = ExplosiveConstants.MarkerSize * App.Config.UI.UIScale;
+            SKPaints.ShapeOutline.StrokeWidth = SKPaints.PaintExplosives.StrokeWidth + ExplosiveConstants.OutlineStrokeWidthAddition * App.Config.UI.UIScale;
             canvas.DrawCircle(circlePosition, size, SKPaints.ShapeOutline); // Draw outline
             canvas.DrawCircle(circlePosition, size, SKPaints.PaintExplosives); // draw LocalPlayer marker
         }

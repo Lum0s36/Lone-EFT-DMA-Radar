@@ -22,8 +22,6 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Camera
 {
     public sealed class CameraManager
     {
-        private const int VIEWPORT_TOLERANCE = 800;
-
         static CameraManager()
         {
             MemDMA.ProcessStarting += MemDMA_ProcessStarting;
@@ -109,8 +107,8 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Camera
 
                 if (width <= 0 || height <= 0)
                 {
-                    width = 1920;
-                    height = 1080;
+                    width = CameraConstants.DefaultViewportWidth;
+                    height = CameraConstants.DefaultViewportHeight;
                     DebugLogger.LogDebug($"[CameraManager] Invalid resolution, using fallback: {width}x{height}");
                 }
 
@@ -125,7 +123,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Camera
             {
                 float w = Vector3.Dot(_viewMatrix.Translation, worldPos) + _viewMatrix.M44;
 
-                if (w < 0.098f)
+                if (w < CameraConstants.MinProjectionW)
                 {
                     scrPos = default;
                     return false;
@@ -152,10 +150,10 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Camera
 
                 if (onScreenCheck)
                 {
-                    int left = useTolerance ? Viewport.Left - VIEWPORT_TOLERANCE : Viewport.Left;
-                    int right = useTolerance ? Viewport.Right + VIEWPORT_TOLERANCE : Viewport.Right;
-                    int top = useTolerance ? Viewport.Top - VIEWPORT_TOLERANCE : Viewport.Top;
-                    int bottom = useTolerance ? Viewport.Bottom + VIEWPORT_TOLERANCE : Viewport.Bottom;
+                    int left = useTolerance ? Viewport.Left - CameraConstants.ViewportTolerance : Viewport.Left;
+                    int right = useTolerance ? Viewport.Right + CameraConstants.ViewportTolerance : Viewport.Right;
+                    int top = useTolerance ? Viewport.Top - CameraConstants.ViewportTolerance : Viewport.Top;
+                    int bottom = useTolerance ? Viewport.Bottom + CameraConstants.ViewportTolerance : Viewport.Bottom;
 
                     if (scrPos.X < left || scrPos.X > right || scrPos.Y < top || scrPos.Y > bottom)
                     {
@@ -197,7 +195,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Camera
                     throw new InvalidOperationException("AllCameras pointer is NULL - offset may be outdated");
                 }
 
-                if (allCamerasPtr > 0x7FFFFFFFFFFF)
+                if (allCamerasPtr > CameraConstants.MaxValidPointer)
                 {
                     DebugLogger.LogDebug($" CRITICAL: AllCameras pointer is invalid: 0x{allCamerasPtr:X}");
                     throw new InvalidOperationException($"Invalid AllCameras pointer: 0x{allCamerasPtr:X}");
@@ -206,7 +204,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Camera
                 // AllCameras is a List<Camera*>
                 // Structure: +0x0 = items array pointer, +0x8 = count (int)
                 var listItemsPtr = Memory.ReadPtr(allCamerasPtr + 0x0, false);
-                var count = Memory.ReadValue<int>(allCamerasPtr + 0x8, false);
+                var count = Memory.ReadValue<int>(allCamerasPtr + CameraConstants.CameraListCountOffset, false);
 
                 DebugLogger.LogDebug($"\nList Structure:");
                 DebugLogger.LogDebug($"  Items Pointer: 0x{listItemsPtr:X}");
@@ -225,7 +223,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Camera
                     throw new InvalidOperationException($"No cameras in list (count: {count})");
                 }
 
-                if (count > 100)
+                if (count > CameraConstants.MaxCameraSearchCount)
                 {
                     DebugLogger.LogDebug($" WARNING: Camera count seems high: {count}");
                     DebugLogger.LogDebug("This might indicate memory corruption or wrong structure.");
@@ -272,17 +270,17 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Camera
         {
             var gameObject = Memory.ReadPtr(cameraPtr + UnitySDK.UnityOffsets.Component_GameObjectOffset, false);
 
-            if (gameObject == 0 || gameObject > 0x7FFFFFFFFFFF)
+            if (gameObject == 0 || gameObject > CameraConstants.MaxValidPointer)
                 throw new InvalidOperationException($"Invalid {cameraType} GameObject: 0x{gameObject:X}");
 
             var ptr1 = Memory.ReadPtr(gameObject + UnitySDK.UnityOffsets.GameObject_ComponentsOffset, false);
 
-            if (ptr1 == 0 || ptr1 > 0x7FFFFFFFFFFF)
+            if (ptr1 == 0 || ptr1 > CameraConstants.MaxValidPointer)
                 throw new InvalidOperationException($"Invalid {cameraType} Ptr1 (GameObject+UnitySDK.UnityOffsets.GameObject_ComponentsOffset): 0x{ptr1:X}");
                 
-            var matrixAddress = Memory.ReadPtr(ptr1 + 0x18, false);
+            var matrixAddress = Memory.ReadPtr(ptr1 + CameraConstants.CameraMatrixComponentsOffset, false);
 
-            if (matrixAddress == 0 || matrixAddress > 0x7FFFFFFFFFFF)
+            if (matrixAddress == 0 || matrixAddress > CameraConstants.MaxValidPointer)
                 throw new InvalidOperationException($"Invalid {cameraType} matrixAddress (Ptr1+0x18): 0x{matrixAddress:X}");
 
             return matrixAddress;
@@ -323,26 +321,26 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Camera
             DebugLogger.LogDebug($"List Items Ptr: 0x{listItemsPtr:X}");
             DebugLogger.LogDebug($"Camera Count: {count}");
 
-            for (int i = 0; i < Math.Min(count, 100); i++)
+            for (int i = 0; i < Math.Min(count, CameraConstants.MaxCameraSearchCount); i++)
             {
                 try
                 {
-                    ulong cameraEntryAddr = listItemsPtr + (uint)(i * 0x8);
+                    ulong cameraEntryAddr = listItemsPtr + (uint)(i * CameraConstants.CameraListStride);
                     var cameraPtr = Memory.ReadPtr(cameraEntryAddr, false);
 
-                    if (cameraPtr == 0 || cameraPtr > 0x7FFFFFFFFFFF)
+                    if (cameraPtr == 0 || cameraPtr > CameraConstants.MaxValidPointer)
                         continue;
 
                     var gameObjectPtr = Memory.ReadPtr(cameraPtr + UnitySDK.UnityOffsets.Component_GameObjectOffset, false);
-                    if (gameObjectPtr == 0 || gameObjectPtr > 0x7FFFFFFFFFFF)
+                    if (gameObjectPtr == 0 || gameObjectPtr > CameraConstants.MaxValidPointer)
                         continue;
 
                     var namePtr = Memory.ReadPtr(gameObjectPtr + UnitySDK.UnityOffsets.GameObject_NameOffset, false);
-                    if (namePtr == 0 || namePtr > 0x7FFFFFFFFFFF)
+                    if (namePtr == 0 || namePtr > CameraConstants.MaxValidPointer)
                         continue;
 
-                    var name = Memory.ReadUtf8String(namePtr, 64, false);
-                    if (string.IsNullOrEmpty(name) || name.Length < 3)
+                    var name = Memory.ReadUtf8String(namePtr, CameraConstants.MaxCameraNameLength, false);
+                    if (string.IsNullOrEmpty(name) || name.Length < CameraConstants.MinCameraNameLength)
                         continue;
 
                     bool isFPS = name.Contains("FPS", StringComparison.OrdinalIgnoreCase) &&
@@ -378,13 +376,15 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Camera
 
                 var vm = Memory.ReadValue<Matrix4x4>(matrixAddress + UnitySDK.UnityOffsets.Camera_ViewMatrixOffset, false);
 
-                if (Math.Abs(vm.M44) < 0.001f)
+                if (Math.Abs(vm.M44) < CameraConstants.MinNonZeroValue)
                 {
                     DebugLogger.LogDebug($"       Optic Camera validation failed: M44 is zero ({vm.M44})");
                     return false;
                 }
 
-                if (Math.Abs(vm.M41) < 0.001f && Math.Abs(vm.M42) < 0.001f && Math.Abs(vm.M43) < 0.001f)
+                if (Math.Abs(vm.M41) < CameraConstants.MinNonZeroValue && 
+                    Math.Abs(vm.M42) < CameraConstants.MinNonZeroValue && 
+                    Math.Abs(vm.M43) < CameraConstants.MinNonZeroValue)
                 {
                     DebugLogger.LogDebug($"       Optic Camera validation failed: Translation is all zeros");
                     return false;
@@ -394,21 +394,20 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Camera
                 float upMag = MathF.Sqrt(vm.M21 * vm.M21 + vm.M22 * vm.M22 + vm.M23 * vm.M23);
                 float fwdMag = MathF.Sqrt(vm.M31 * vm.M31 + vm.M32 * vm.M32 + vm.M33 * vm.M33);
 
-                if (rightMag < 0.1f && upMag < 0.1f && fwdMag < 0.1f)
+                if (rightMag < CameraConstants.MinVectorMagnitude && 
+                    upMag < CameraConstants.MinVectorMagnitude && 
+                    fwdMag < CameraConstants.MinVectorMagnitude)
                 {
                     DebugLogger.LogDebug($"       Optic Camera validation failed: All rotation magnitudes too small (R:{rightMag:F3} U:{upMag:F3} F:{fwdMag:F3})");
                     return false;
                 }
 
-                const float minMagnitude = 0.1f;
-                const float maxMagnitude = 100.0f;
-
                 bool hasValidVectors = false;
-                if (rightMag >= minMagnitude && rightMag <= maxMagnitude)
+                if (rightMag >= CameraConstants.MinVectorMagnitude && rightMag <= CameraConstants.MaxVectorMagnitude)
                     hasValidVectors = true;
-                if (upMag >= minMagnitude && upMag <= maxMagnitude)
+                if (upMag >= CameraConstants.MinVectorMagnitude && upMag <= CameraConstants.MaxVectorMagnitude)
                     hasValidVectors = true;
-                if (fwdMag >= minMagnitude && fwdMag <= maxMagnitude)
+                if (fwdMag >= CameraConstants.MinVectorMagnitude && fwdMag <= CameraConstants.MaxVectorMagnitude)
                     hasValidVectors = true;
 
                 if (!hasValidVectors)
@@ -448,12 +447,12 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Camera
 
                     if (sightComponent.ScopeZoomValue != 0f)
                     {
-                        bool result = sightComponent.ScopeZoomValue > 1f;
+                        bool result = sightComponent.ScopeZoomValue > CameraConstants.MinScopeZoom;
                         return result;
                     }
 
                     float zoomLevel = sightComponent.GetZoomLevel();
-                    bool zoomResult = zoomLevel > 1f;
+                    bool zoomResult = zoomLevel > CameraConstants.MinScopeZoom;
                     return zoomResult;
                 }
 
@@ -612,7 +611,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Camera
                 if (allCamerasPtr == 0) return;
 
                 var listItemsPtr = Memory.ReadPtr(allCamerasPtr + 0x0, false);
-                var count = Memory.ReadValue<int>(allCamerasPtr + 0x8, false);
+                var count = Memory.ReadValue<int>(allCamerasPtr + CameraConstants.CameraListCountOffset, false);
 
                 DebugLogger.LogDebug($"Searching for potential optic cameras... ({count} cameras available)");
 
@@ -620,19 +619,19 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Camera
                 {
                     try
                     {
-                        ulong cameraEntryAddr = listItemsPtr + (uint)(i * 0x8);
+                        ulong cameraEntryAddr = listItemsPtr + (uint)(i * CameraConstants.CameraListStride);
                         var cameraPtr = Memory.ReadPtr(cameraEntryAddr, false);
 
-                        if (cameraPtr == 0 || cameraPtr > 0x7FFFFFFFFFFF) continue;
+                        if (cameraPtr == 0 || cameraPtr > CameraConstants.MaxValidPointer) continue;
 
                         var gameObjectPtr = Memory.ReadPtr(cameraPtr + UnitySDK.UnityOffsets.Component_GameObjectOffset, false);
-                        if (gameObjectPtr == 0 || gameObjectPtr > 0x7FFFFFFFFFFF) continue;
+                        if (gameObjectPtr == 0 || gameObjectPtr > CameraConstants.MaxValidPointer) continue;
 
                         var namePtr = Memory.ReadPtr(gameObjectPtr + UnitySDK.UnityOffsets.GameObject_NameOffset, false);
-                        if (namePtr == 0 || namePtr > 0x7FFFFFFFFFFF) continue;
+                        if (namePtr == 0 || namePtr > CameraConstants.MaxValidPointer) continue;
 
-                        var name = Memory.ReadUtf8String(namePtr, 64, false);
-                        if (string.IsNullOrEmpty(name) || name.Length < 3) continue;
+                        var name = Memory.ReadUtf8String(namePtr, CameraConstants.MaxCameraNameLength, false);
+                        if (string.IsNullOrEmpty(name) || name.Length < CameraConstants.MinCameraNameLength) continue;
 
                         // Check for potential Optic Camera (Clone or Optic)
                         bool isPotentialOptic = (name.Contains("Clone", StringComparison.OrdinalIgnoreCase) ||
@@ -681,15 +680,15 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Camera
                 try
                 {
                     using var zoomArray = SightInterface.Zooms;
-                    if (SelectedScope >= zoomArray.Count || SelectedScope is < 0 or > 10)
+                    if (SelectedScope >= zoomArray.Count || SelectedScope < 0 || SelectedScope > CameraConstants.MaxSelectedScopeIndex)
                         return -1.0f;
 
                     using var selectedScopeModes = UnityArray<int>.Create(pScopeSelectedModes, false);
                     int selectedScopeMode = SelectedScope >= selectedScopeModes.Count ? 0 : selectedScopeModes[SelectedScope];
-                    ulong zoomAddr = zoomArray[SelectedScope] + UnityArray<float>.ArrBaseOffset + (uint)selectedScopeMode * 0x4;
+                    ulong zoomAddr = zoomArray[SelectedScope] + UnityArray<float>.ArrBaseOffset + (uint)selectedScopeMode * CameraConstants.ZoomElementSize;
 
                     float zoomLevel = Memory.ReadValue<float>(zoomAddr, false);
-                    if (zoomLevel.IsNormalOrZero() && zoomLevel is >= 0f and < 100f)
+                    if (zoomLevel.IsNormalOrZero() && zoomLevel >= 0f && zoomLevel < CameraConstants.MaxValidZoom)
                         return zoomLevel;
 
                     return -1.0f;

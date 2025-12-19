@@ -36,8 +36,8 @@ namespace LoneEftDmaRadar.Tarkov.Unity.Structures
                     const string signature = "48 8B 05 ? ? ? ? 48 8B 08 49 8B 3C 0C";
                     ulong allCamerasSig = Memory.FindSignature(signature);
                     allCamerasSig.ThrowIfInvalidVirtualAddress(nameof(allCamerasSig));
-                    int rva = Memory.ReadValueEnsure<int>(allCamerasSig + 3);
-                    var allCamerasPtr = Memory.ReadValueEnsure<VmmPointer>(allCamerasSig.AddRVA(7, rva));
+                    int rva = Memory.ReadValueEnsure<int>(allCamerasSig + UnityConstants.AllCamerasSignatureRvaOffset);
+                    var allCamerasPtr = Memory.ReadValueEnsure<VmmPointer>(allCamerasSig.AddRVA(UnityConstants.AllCamerasSignatureInstructionLength, rva));
                     allCamerasPtr.ThrowIfInvalid();
                     DebugLogger.LogDebug("AllCameras Located via Signature.");
                     return allCamerasPtr;

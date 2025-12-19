@@ -210,8 +210,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Exits
             // Try to find matching extract in static data
             var extract = map.Extracts.FirstOrDefault(e => 
                 e.Name.Equals(exfilName, StringComparison.OrdinalIgnoreCase) ||
-                (Exfil.ExfilNames.TryGetValue(_mapId, out var names) && 
-                 names.TryGetValue(exfilName, out var friendlyName) &&
+                (ExfilNameLookup.TryGetFriendlyName(_mapId, exfilName, out var friendlyName) &&
                  e.Name.Equals(friendlyName, StringComparison.OrdinalIgnoreCase)));
 
             return extract?.Position?.AsVector3() ?? Vector3.Zero;

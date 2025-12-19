@@ -195,15 +195,15 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Quests
             var point = Position.ToMapPos(mapParams.Map).ToZoomedPos(mapParams);
             MouseoverPosition = new Vector2(point.X, point.Y);
             var heightDiff = Position.Y - localPlayer.Position.Y;
-            SKPaints.ShapeOutline.StrokeWidth = 2f;
+            SKPaints.ShapeOutline.StrokeWidth = QuestConstants.QuestMarkerStrokeWidth;
             
-            if (heightDiff > 1.45) // marker is above player
+            if (heightDiff > QuestConstants.QuestMarkerHeightThreshold) // marker is above player
             {
                 using var path = point.GetUpArrow();
                 canvas.DrawPath(path, SKPaints.ShapeOutline);
                 canvas.DrawPath(path, SKPaints.PaintQuestZone);
             }
-            else if (heightDiff < -1.45) // marker is below player
+            else if (heightDiff < -QuestConstants.QuestMarkerHeightThreshold) // marker is below player
             {
                 using var path = point.GetDownArrow();
                 canvas.DrawPath(path, SKPaints.ShapeOutline);
@@ -211,7 +211,7 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Quests
             }
             else // marker is level with player
             {
-                var squareSize = 8 * App.Config.UI.UIScale;
+                var squareSize = QuestConstants.QuestMarkerSquareSize * App.Config.UI.UIScale;
                 canvas.DrawRect(point.X, point.Y, squareSize, squareSize, SKPaints.ShapeOutline);
                 canvas.DrawRect(point.X, point.Y, squareSize, squareSize, SKPaints.PaintQuestZone);
             }
@@ -233,8 +233,8 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Quests
                 !ObjectiveDescription.Equals(ActionText, StringComparison.OrdinalIgnoreCase))
             {
                 // Truncate long descriptions
-                var desc = ObjectiveDescription.Length > 60 
-                    ? ObjectiveDescription[..57] + "..." 
+                var desc = ObjectiveDescription.Length > QuestConstants.MaxDescriptionLength 
+                    ? ObjectiveDescription[..QuestConstants.TruncatedDescriptionLength] + "..." 
                     : ObjectiveDescription;
                 lines.Add(desc);
             }

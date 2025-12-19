@@ -106,12 +106,12 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Player.Helpers
             var rc = RaidCount ?? 0;
             SurvivedRate = rc == 0
                 ? 0f
-                : SurvivedCount.GetValueOrDefault() / (float)rc * 100f;
+                : SurvivedCount.GetValueOrDefault() / (float)rc * PlayerConstants.PercentageMultiplier;
 
             // --- Hours Played ---
             var totalTime = Data?.PmcStats?.Counters?.TotalInGameTime;
             if (totalTime.HasValue && totalTime.Value > 0)
-                Hours = (int)Math.Round(totalTime.Value / 3600f);
+                Hours = (int)Math.Round(totalTime.Value / PlayerConstants.SecondsPerHour);
 
             // --- Level ---
             var xp = Data?.Info?.Experience;
@@ -169,36 +169,36 @@ namespace LoneEftDmaRadar.Tarkov.GameWorld.Player.Helpers
         {
             if (_player.Type is not PlayerType.PMC or PlayerType.PScav)
                 return;
-            float kd = Overall_KD ?? 5f; // Default to average KD
+            float kd = Overall_KD ?? PlayerConstants.DefaultKDRatio;
             int hrs = Hours ?? 0;
-            float sr = SurvivedRate ?? 50f; // Default to average survival rate
+            float sr = SurvivedRate ?? PlayerConstants.DefaultSurvivalRate;
             int achievLevel = AchievLevel;
-            if (kd >= 15f) // Excessive KD (or they are just really good and we should watch them anyway!)
+            if (kd >= PlayerConstants.ExcessiveKDThreshold) // Excessive KD (or they are just really good and we should watch them anyway!)
             {
                 _player.IsFocused = true;
             }
-            else if (hrs < 30 &&
+            else if (hrs < PlayerConstants.NewAccountMaxHours &&
                     !IsEOD && !IsUnheard) // Low hrs played on std account, could be a brand new cheater account
             {
                 _player.IsFocused = true;
             }
-            else if (sr >= 65f) // Very high survival rate
+            else if (sr >= PlayerConstants.HighSurvivalRateThreshold) // Very high survival rate
             {
                 _player.IsFocused = true;
             }
-            else if (kd >= 10f && sr < 35f) // Possible KD Dropping
+            else if (kd >= PlayerConstants.HighKDThreshold && sr < PlayerConstants.LowSurvivalRateThreshold) // Possible KD Dropping
             {
                 _player.IsFocused = true;
             }
-            else if (hrs >= 1000 && sr < 25f) // Possible KD Dropping
+            else if (hrs >= PlayerConstants.HighHoursThreshold && sr < PlayerConstants.VeryLowSurvivalRateThreshold) // Possible KD Dropping
             {
                 _player.IsFocused = true;
             }
-            else if (achievLevel >= 2 && hrs < 1000) // Very High achievement level but not enough hrs to have legitimately earned them
+            else if (achievLevel >= PlayerConstants.VeryHighAchievementLevel && hrs < PlayerConstants.HighHoursThreshold) // Very High achievement level but not enough hrs to have legitimately earned them
             {
                 _player.IsFocused = true;
             }
-            else if (achievLevel >= 1 && hrs < 100) // High achievement level but not enough hrs to have legitimately earned them
+            else if (achievLevel >= PlayerConstants.HighAchievementLevel && hrs < PlayerConstants.LowHoursForHighAchievementThreshold) // High achievement level but not enough hrs to have legitimately earned them
             {
                 _player.IsFocused = true;
             }
