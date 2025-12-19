@@ -216,6 +216,13 @@ namespace LoneEftDmaRadar.UI.ESP.Rendering
 
             var label = "";
 
+            // Quest items get special prefix (consistent with Radar)
+            if (item.IsQuestItem)
+            {
+                label = "Q: " + item.Name.Replace("Q_", "");
+                return label;
+            }
+
             // Use the shared UI label from LootItem
             if (item.IsWishlisted)
             {
